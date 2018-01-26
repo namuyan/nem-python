@@ -17,8 +17,16 @@ Python3 (>=3.5)
 使い方
 -----
 ```python
-
+from nem_python.nem_connect import NemConnect
+nem = NemConnect(main_net=True)
+nem.start()
 ```
+
+[HOWTOUSE.md](HOWTOUSE.md)
+
+サンプル
+-------
+testフォルダー内
 
 作者
 ----

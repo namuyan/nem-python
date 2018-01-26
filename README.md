@@ -1,6 +1,7 @@
 nem-python
 ==========
-nem-python is simple NEM library.
+nem-python is simple NEM library.  
+[README-JP.md](README-JP.md)
 
 Feature
 -------
@@ -13,14 +14,22 @@ Require
 -------
 Python3 (>=3.5)
 
-使い方
+HowToUse
 -----
 ```python
-
+from nem_python.nem_connect import NemConnect
+nem = NemConnect(main_net=True)
+nem.start()
 ```
 
-作者
-----
+[HOWTOUSE.md](HOWTOUSE.md)
+
+Samples
+------
+Look test folder.
+
+Author
+------
 [@namuyan_mine](http://twitter.com/namuyan_mine/)
 
 Licence
