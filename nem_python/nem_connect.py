@@ -141,77 +141,107 @@ class NemConnect:
                 time.sleep(5)
                 if self.monitor_cks != monitor_cks:
                     monitor_cks = copy.copy(self.monitor_cks)
-                for ck in monitor_cks:
-                    un = self._get_auto(
-                        call="account/unconfirmedTransactions",
-                        data={'address': ck.decode()})
-                    for tx in un.json()['data']:
-                        if 'otherTrans' not in tx['transaction']:
-                            continue  # not multisig
-                        elif tx['transaction']['otherTrans'] not in find_tx_list:
-                            # get new multisig transaction
-                            find_tx_list.append(tx['transaction']['otherTrans'])
-                            account_info = self.get_account_info(ck=ck)
-                            all_cosigner = [u['address'].encode('utf8') for u in account_info['meta']['cosignatories']]
-                            self.unconfirmed_multisig_que.put({
-                                "type": "new",
-                                "tx_hash": tx['meta']['data'].encode('utf8'),
-                                "account_ck": ck,
-                                "inner_tx": tx['transaction']['otherTrans'],
-                                "all_cosigner": all_cosigner,
-                                "need_cosigner": account_info['multisigInfo']['minCosignatories'],
-                                "signed_cosigner": len(tx['transaction']['signatures'])})
-                            logging.info("new multisig %s %s" % (ck.decode(), tx['meta']['data']))
 
-                        else:
-                            for sign in tx['transaction']['signatures']:
-                                if sign in find_tx_list:
+                try:
+                    for ck in monitor_cks:
+                        un = self._get_auto(
+                            call="account/unconfirmedTransactions",
+                            data={'address': ck.decode()})
+                        for tx in un.json()['data'][::-1]:
+                            if 'otherTrans' not in tx['transaction']:
+                                continue  # not multisig
+                            elif tx['transaction']['otherTrans'] not in find_tx_list:
+                                # get new multisig transaction
+                                find_tx_list.append(tx['transaction']['otherTrans'])
+                                account_info = self.get_account_info(ck=ck)
+                                if 'cosignatoriesCount' not in account_info['account']['multisigInfo']:
+                                    # Not multisig account, may as cosigner
                                     continue
-                                else:
-                                    # new cosigner transaction
-                                    find_tx_list.append(sign)
-                                    self.unconfirmed_multisig_que.put({
-                                        "type": "cosigner",
-                                        "tx_hash": tx['meta']['data'].encode('utf8'),
-                                        "account_ck": ck,
-                                        "inner_tx": tx['transaction']['otherTrans'],
-                                        "cosigner": sign['otherAccount'].encode('utf8')})
-                                    logging.info("new cosigner %s %s" % (ck.decode(), sign['otherAccount']))
-                    else:
-                        if len(find_tx_list) > len(monitor_cks) * 200:
-                            find_tx_list = find_tx_list[10:]
+                                all_cosigner = [u['address'] for u in account_info['meta']['cosignatories']]
+                                self.unconfirmed_multisig_que.put({
+                                    "type": "new",
+                                    "tx_hash": tx['meta']['data'],
+                                    "account_ck": ck.decode(),
+                                    "inner_tx": tx['transaction']['otherTrans'],
+                                    "all_cosigner": all_cosigner,
+                                    "need_cosigner": account_info['account']['multisigInfo']['minCosignatories'],
+                                })
+                                logging.info("new multisig %s %s" % (ck.decode(), tx['meta']['data']))
+
+                            else:
+                                for sign in tx['transaction']['signatures']:
+                                    if sign in find_tx_list:
+                                        continue
+                                    else:
+                                        # new cosigner transaction
+                                        find_tx_list.append(sign)
+                                        self.unconfirmed_multisig_que.put({
+                                            "type": "cosigner",
+                                            "tx_hash": tx['meta']['data'],
+                                            "account_ck": ck.decode(),
+                                            "inner_tx": tx['transaction']['otherTrans'],
+                                            "cosigner": sign['otherAccount']})
+                                        logging.info("new cosigner %s %s" % (ck.decode(), sign['otherAccount']))
+                        else:
+                            if len(find_tx_list) > len(monitor_cks) * 50:
+                                # Remove old tx list
+                                find_tx_list = find_tx_list[10:]
+
+                except queue.Full:
+                    for dummy in range(40):
+                        self.unconfirmed_multisig_que.get()
+                        logging.info("refresh queue")
+                except Exception as e:
+                    logging.debug(e)
 
         # 新着入金を取得
         # new_received_que.get()で取得
         def new_received_check():
             find_tx_list = list()
             monitor_cks = list()
-            reform_obj = TransactionReform()
+            height = 0
+            reform_obj = TransactionReform(main_net=self.main_net)
             while True:
                 time.sleep(5)
-                if self.monitor_cks != monitor_cks:
-                    monitor_cks = copy.copy(self.monitor_cks)
-                    # 初めに最新の25件を取得
+                try:
+                    # 新規のアカウントのみ初期化(初期化)
+                    for ck in set(self.monitor_cks) - set(monitor_cks):
+                        new_income = self.get_account_transfer_newest(ck=ck, call_name=self.TRANSFER_INCOMING)
+                        tx_reformed = reform_obj.reform_transactions(tx_list=new_income)[::-1]
+                        for tx in tx_reformed:
+                            if tx not in find_tx_list:
+                                find_tx_list.append(tx)
+                        height = max(height, tx_reformed[-1]['height'])
+                    else:
+                        monitor_cks = copy.copy(self.monitor_cks)
+
+                    # モニタリング
                     for ck in monitor_cks:
-                        new_income = self.get_account_transfer_newest(ck=ck)[::-1]
-                        find_tx_list.extend(reform_obj.reform_transactions(tx_list=new_income))
-                for ck in monitor_cks:
-                    new_income = self.get_account_transfer_newest(ck=ck)[::-1]
-                    tx_reformed = reform_obj.reform_transactions(tx_list=new_income)
-                    for tx in tx_reformed:
-                        if tx in find_tx_list:
-                            continue
-                        else:
-                            find_tx_list.append(tx)
-                            try:
+                        new_income = self.get_account_transfer_newest(ck=ck, call_name=self.TRANSFER_INCOMING)
+                        tx_reformed = reform_obj.reform_transactions(tx_list=new_income)[::-1]
+                        for tx in tx_reformed:
+                            if tx in find_tx_list:
+                                # 既に通知済み
+                                continue
+                            elif height > tx['height']:
+                                # 前記録時より古い
+                                continue
+                            else:
+                                height = tx['height']
+                                find_tx_list.append(tx)
                                 logging.info("New income tx %s" % tx['txhash'])
                                 self.new_received_que.put(tx)
-                            except queue.Full:
-                                pass
 
-                else:
-                    if len(find_tx_list) > len(monitor_cks) * 50:
-                        find_tx_list = find_tx_list[10:]
+                    else:
+                        if len(find_tx_list) > len(monitor_cks) * 50:
+                            find_tx_list = find_tx_list[10:]
+
+                except queue.Full:
+                    for dummy in range(40):
+                        self.new_received_que.get()
+                    logging.info("refresh queue")
+                except Exception as e:
+                    logging.debug(e)
 
         # Block高の更新
         def new_block_check():

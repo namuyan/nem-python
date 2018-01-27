@@ -64,8 +64,7 @@ class TransactionReform:
             r['time'] = inner_tx['timeStamp'] + 1427587585
             r['deadline'] = inner_tx['deadline'] + 1427587585
 
-            r['sender'] = self.pk2ck(inner_tx['signer'])
-            r['recipient'] = inner_tx['recipient'].encode('utf8')
+            r['recipient'] = inner_tx['recipient']
 
             if 'mosaics' not in inner_tx:
                 # ver1 tx
@@ -94,8 +93,8 @@ class TransactionReform:
             r['time'] = tx['transaction']['timeStamp'] + 1427587585
             r['deadline'] = tx['transaction']['deadline'] + 1427587585
 
-            r['sender'] = self.pk2ck(tx['transaction']['signer'])
-            r['recipient'] = tx['transaction']['recipient'].encode('utf8')
+            r['sender'] = self.pk2ck(tx['transaction']['signer']).decode()
+            r['recipient'] = tx['transaction']['recipient']
 
             if 'mosaics' not in tx['transaction']:
                 # ver1 tx
@@ -130,7 +129,7 @@ class TransactionReform:
                     r['message'] = unhexlify(msg_hex).decode('utf-8')
                     r['message_type'] = 1
                 except:
-                    r['message'] = tran['message']['payload'].encode('utf-8')
+                    r['message'] = tran['message']['payload']
                     r['message_type'] = 3
 
             elif tran['message']['type'] == 2:
@@ -140,7 +139,7 @@ class TransactionReform:
                     r['message'] = self.ecc.decrypt(self.your_sk, tran['signer'], msg_hex)
                     r['message_type'] = 2
                 except:
-                    r['message'] = msg_hex
+                    r['message'] = msg_hex.decode()
                     r['message_type'] = 4
 
             else:
