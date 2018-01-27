@@ -393,6 +393,31 @@ class NemConnect:
                     logging.debug("%s, %s" % (check_url[1], e))
         return
 
+    @staticmethod
+    def clean_tmp_folder(maxsize=20):
+        # maxsize Kbyte までTmpファイルが膨れるのを許容する
+        path_size_time = list()
+        all_size = 0
+        for p in os.listdir(TMP_DIR):
+            if 'peer.json' in p:
+                continue
+            path = TMP_DIR + '/' + p
+            size = os.path.getsize(path)
+            time_ = int(os.stat(path).st_mtime)
+            path_size_time.append((path, size, time_))
+            all_size += size
+        if all_size < maxsize * 1000000:
+            return False
+        if len(path_size_time) < 3:
+            return False
+        for p, s, t in sorted(path_size_time, key=lambda x: x[2]):
+            os.remove(p)
+            all_size -= s
+            if all_size <= maxsize * 1000000:
+                return True
+        else:
+            return False
+
     """ rest api methods """
     def get_peers(self):
         original_peers = self._tmp_read(path=PEER_FILE, pre=list())
@@ -596,7 +621,7 @@ class NemConnect:
 
     def get_account_harvests_all(self, ck, c=100):
         # tmpファイルの存在確認
-        path = TMP_DIR + '/' + 'account.harvests.' + '.' + ck.decode() + '.json'
+        path = TMP_DIR + '/' + 'account.harvests.' + ck.decode() + '.json'
         cashe = self._tmp_read(path=path, pre=list())
         # 履歴を取得
         while True:
