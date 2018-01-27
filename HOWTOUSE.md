@@ -65,7 +65,7 @@ nem.get_account_harvests_newest(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
  
 # Get account all harvests
 # It takes some time and is easy to fail.
-nem.get_account_harvests_newest(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
+nem.get_account_harvests_all(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
 ```
 
 ### Send functions

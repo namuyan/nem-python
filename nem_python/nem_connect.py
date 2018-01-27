@@ -481,6 +481,10 @@ class NemConnect:
         # account/transfers/outgoing
         # account/transfers/all
         """
+        # tmpファイルの存在確認
+        path = TMP_DIR + '/' + call_name.replace('/', '.') + '.' + ck.decode() + '.json'
+        cashe = self._tmp_read(path=path, pre=list())
+        # 履歴を取得
         while True:
             url = self._random_choice()
             data = self._get(
@@ -489,8 +493,27 @@ class NemConnect:
                 data={'address': ck.decode()})
             if not data.ok:
                 raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
-            result = data.json()['data']
-            page_index = data.json()['data'][-1]['meta']['id']
+            j = data.json()['data']
+
+            # TXがまだ存在しない場合
+            if len(j) == 0:
+                return list()
+            # Casheを使用する場合
+            if len(cashe) > 0:
+                oldest_tx = j[-1]['transaction']
+                newest_tx = j[0]['transaction']
+                if newest_tx == cashe[0]['transaction']:
+                    return cashe
+                else:
+                    for i in range(min(25, len(cashe))):
+                        if oldest_tx == cashe[i]['transaction']:
+                            result = j + cashe[i + 1:]
+                            self._tmp_write(path=path, data=result)
+                            return result
+
+            # 同一の物がない場合
+            result = j
+            page_index = j[-1]['meta']['id']
             while c > 0:
                 c -= 1
                 data = self._get(
@@ -500,10 +523,13 @@ class NemConnect:
                 if not data.ok:
                     # ここはDDOS防止機構とどう付き合うか考えもの
                     raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
-                if len(data.json()['data']) == 0:
+                j = data.json()['data']
+
+                if len(j) == 0:
+                    self._tmp_write(path=path, data=result)
                     return result
-                result.extend(data.json()['data'])
-                page_index = data.json()['data'][-1]['meta']['id']
+                result.extend(j)
+                page_index = j[-1]['meta']['id']
             else:
                 logging.error("not completed! %s" % ck.decode())
                 return result
@@ -517,6 +543,10 @@ class NemConnect:
         return data.json()['data']
 
     def get_account_harvests_all(self, ck, c=100):
+        # tmpファイルの存在確認
+        path = TMP_DIR + '/' + 'account.harvests.' + '.' + ck.decode() + '.json'
+        cashe = self._tmp_read(path=path, pre=list())
+        # 履歴を取得
         while True:
             url = self._random_choice()
             data = self._get(
@@ -525,8 +555,27 @@ class NemConnect:
                 data={'address': ck.decode()})
             if not data.ok:
                 raise Exception("failed 'account/harvests' %s" % data.json()['message'])
-            result = data.json()['data']
-            page_index = data.json()['data'][-1]['id']
+            j = data.json()['data']
+
+            # TXがまだ存在しない場合
+            if len(j) == 0:
+                return list()
+            # Casheを使用する場合
+            if len(cashe) > 0:
+                oldest_tx = j[-1]['height']
+                newest_tx = j[0]['height']
+                if newest_tx == cashe[0]['height']:
+                    return cashe
+                else:
+                    for i in range(min(25, len(cashe))):
+                        if oldest_tx == cashe[i]['height']:
+                            result = j + cashe[i + 1:]
+                            self._tmp_write(path=path, data=result)
+                            return result
+
+            # 同一の物がない場合
+            result = j
+            page_index = j[-1]['id']
             while c > 0:
                 c -= 1
                 data = self._get(
@@ -536,10 +585,13 @@ class NemConnect:
                 if not data.ok:
                     # ここはDDOS防止機構とどう付き合うか考えもの
                     raise Exception("failed 'account/harvests' %s" % data.json()['message'])
-                if len(data.json()['data']) == 0:
+                j = data.json()['data']
+
+                if len(j) == 0:
+                    self._tmp_write(path=path, data=result)
                     return result
-                result.extend(data.json()['data'])
-                page_index = data.json()['data'][-1]['id']
+                result.extend(j)
+                page_index = j[-1]['id']
             else:
                 logging.error("not completed! %s" % ck.decode())
                 return result
