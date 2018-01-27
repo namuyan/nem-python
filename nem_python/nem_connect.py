@@ -53,6 +53,7 @@ class NemConnect:
 
     def __init__(self, main_net=True):
         self.main_net = main_net
+        create_tmp_now = False
         global TMP_DIR, PEER_FILE
         # tmpファイルの存在を確認、作成
         if main_net:
@@ -60,11 +61,13 @@ class NemConnect:
             PEER_FILE = TMP_DIR + '/peer.json'
             if not os.path.isdir(TMP_DIR):
                 os.mkdir(TMP_DIR)
+                create_tmp_now = True
         else:
             TMP_DIR = gettempdir().replace("\\", "/") + '/nem_python_test'
             PEER_FILE = TMP_DIR + '/peer.json'
             if not os.path.isdir(TMP_DIR):
                 os.mkdir(TMP_DIR)
+                create_tmp_now = True
         # Lockファイルを作成
         self.lock = threading.Lock()
         # Peerを内部に保存
@@ -89,6 +92,13 @@ class NemConnect:
                 ('http', '82.196.9.187', 7890),  # NEMventory
                 ('http', '188.166.14.34', 7890),  # testnet.hxr.team
             })
+        # TMPを初めて作ったので更新
+        if create_tmp_now:
+            self.f_peer_update = True
+            self.timeout = 3
+            self._update_peers()
+            self.f_peer_update = False
+            self.timeout = 10
 
     def stop(self):
         while True:
@@ -125,7 +135,7 @@ class NemConnect:
             while True:
                 self.f_peer_update = True
                 self.timeout = 3
-                if len(NIS_PEERS_SET) < 5 or time.time() - os.stat(PEER_FILE).st_mtime > 3600 * 3:
+                if time.time() - os.stat(PEER_FILE).st_mtime > 3600 * 3:
                     # debugﾓｰﾄﾞでないか、3時間以上更新されていない場合、Peerを更新
                     self._update_peers()
                 self.f_peer_update = False
