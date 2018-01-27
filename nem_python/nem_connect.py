@@ -125,9 +125,21 @@ class NemConnect:
                 else:
                     json.dump(data, f)
 
-    @staticmethod
-    def _random_choice():
-        return random.choice(list(NIS_PEERS_SET))
+    def _random_choice_url(self):
+        while True:
+            try:
+                url = random.choice(list(NIS_PEERS_SET))
+                d = self._get(call='chain/last-block', url=url)
+                height = d.json()['height']
+                if self.height <= height:
+                    return url
+                elif len(NIS_PEERS_SET) > 1:
+                    continue
+                else:
+                    break
+            except:
+                pass
+        raise Exception("run out of API connection pool.")
 
     def start(self):
         # Peerリスト自動更新
@@ -296,7 +308,7 @@ class NemConnect:
         while retry > 0:
             try:
                 # 隣接ノードを取得
-                check_url = self._random_choice()
+                check_url = self._random_choice_url()
                 raw_peers = self._get(call="node/peer-list/reachable", url=check_url)
             except Exception as e:
                 logging.debug(e)
@@ -436,7 +448,7 @@ class NemConnect:
             return self.ns2def_cashe[namespace]
 
         index_id = None
-        url = self._random_choice()
+        url = self._random_choice_url()
         result = dict()
         while True:
             data = self._get(
@@ -446,7 +458,7 @@ class NemConnect:
             )
             if not data.ok:
                 index_id = None
-                url = self._random_choice()
+                url = self._random_choice_url()
                 logging.error("failed get mosaic def, retry")
                 continue
             elif len(data.json()['data']) == 0:
@@ -526,7 +538,7 @@ class NemConnect:
         cashe = self._tmp_read(path=path, pre=list())
         # 履歴を取得
         while True:
-            url = self._random_choice()
+            url = self._random_choice_url()
             data = self._get(
                 call=call_name,
                 url=url,
@@ -588,7 +600,7 @@ class NemConnect:
         cashe = self._tmp_read(path=path, pre=list())
         # 履歴を取得
         while True:
-            url = self._random_choice()
+            url = self._random_choice_url()
             data = self._get(
                 call="account/harvests",
                 url=url,
@@ -842,7 +854,7 @@ class NemConnect:
     def transaction_announce(self, tx_hex, tx_sign):
         data = self._post(
             call="transaction/announce",
-            url=self._random_choice(),
+            url=self._random_choice_url(),
             data={'data': tx_hex.decode(),
                   'signature': tx_sign.decode()}
         )
@@ -860,7 +872,7 @@ class NemConnect:
         count = 10
         while count > 0:
             count -= 1
-            url_set.add(self._random_choice())
+            url_set.add(self._random_choice_url())
             if len(url_set) >= 3:
                 break
 
@@ -909,7 +921,7 @@ class NemConnect:
         retry = 10
         while retry > 0:
             retry -= 1
-            url = self._random_choice()
+            url = self._random_choice_url()
             try:
                 headers = {'Content-type': 'application/json'}
                 uri = "%s://%s:%d/%s" % (url[0], url[1], url[2], call)
