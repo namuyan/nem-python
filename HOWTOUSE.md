@@ -248,8 +248,8 @@ type `new` is first notification. type `cosigner` is notification other cosigner
 ```python
 a = {
     'type': 'new',
-    'tx_hash': '6bffafe04d4d5d8e0a8a21d55ed9d014122c260080445e4192f4cd4b7a5b2a5e',
-    'account_ck': 'NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA',
+    'txhash': '6bffafe04d4d5d8e0a8a21d55ed9d014122c260080445e4192f4cd4b7a5b2a5e',
+    'account': 'NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA',
     'inner_tx': {
         'timeStamp': 89452819,
         'amount': 3986000000,
@@ -266,8 +266,8 @@ a = {
 }
 b = {
     'type': 'cosigner',
-    'tx_hash': '3eb20079eb130ec2322e46f156e6ee364d827afe4b916f78861cebd829147535',
-    'account_ck': 'NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA',
+    'txhash': '3eb20079eb130ec2322e46f156e6ee364d827afe4b916f78861cebd829147535',
+    'account': 'NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA',
     'inner_tx': {
         'timeStamp': 89455580,
         'amount': 5900000000,

@@ -29,7 +29,7 @@ def multisig_sending():
     print("tx hex:", tx_hex)
     sign = Ed25519.sign(tx_hex, cosigner_sk, cosigner_pk)
     print("sign", sign)
-    r = nem.transaction_announce_dev(tx_hex, sign)
+    r = nem.transaction_announce(tx_hex, sign)
     print(r)
 
 

@@ -185,8 +185,8 @@ class NemConnect:
                                 all_cosigner = [u['address'] for u in account_info['meta']['cosignatories']]
                                 self.unconfirmed_multisig_que.put({
                                     "type": "new",
-                                    "tx_hash": tx['meta']['data'],
-                                    "account_ck": ck,
+                                    "txhash": tx['meta']['data'],
+                                    "account": ck,
                                     "inner_tx": tx['transaction']['otherTrans'],
                                     "all_cosigner": all_cosigner,
                                     "need_cosigner": account_info['account']['multisigInfo']['minCosignatories'],
@@ -202,8 +202,8 @@ class NemConnect:
                                         find_tx_list.append(sign)
                                         self.unconfirmed_multisig_que.put({
                                             "type": "cosigner",
-                                            "tx_hash": tx['meta']['data'],
-                                            "account_ck": ck,
+                                            "txhash": tx['meta']['data'],
+                                            "account": ck,
                                             "inner_tx": tx['transaction']['otherTrans'],
                                             "cosigner": sign['otherAccount']})
                                         logging.info("new cosigner %s %s" % (ck, sign['otherAccount']))
@@ -885,7 +885,7 @@ class NemConnect:
             raise Exception("failed 'transaction/prepare' %s" % data.json()['message'])
         return data.json()['data']
 
-    def transaction_announce(self, tx_hex, tx_sign):
+    def transaction_announce_old(self, tx_hex, tx_sign):
         data = self._post(
             call="transaction/announce",
             url=self._random_choice_url(),
@@ -895,12 +895,12 @@ class NemConnect:
         if not data.ok or data.json()['message'] != 'SUCCESS':
             raise Exception("failed 'transaction/announce' %s" % data.json()['message'])
         try:
-            tx_hash = data.json()['innerTransactionHash']['data']  # multi sig
+            txhash = data.json()['innerTransactionHash']['data']  # multi sig
         except KeyError:
-            tx_hash = data.json()['transactionHash']['data']  # single sig
-        return tx_hash
+            txhash = data.json()['transactionHash']['data']  # single sig
+        return txhash
 
-    def transaction_announce_dev(self, tx_hex, tx_sign):
+    def transaction_announce(self, tx_hex, tx_sign):
         # 送金先を３つランダムで選ぶ
         url_set = set()
         count = 10
