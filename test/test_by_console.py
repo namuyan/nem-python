@@ -25,7 +25,7 @@ def get_logger(level=logging.DEBUG):
 
 
 def test():
-    main_net = True
+    main_net = False
     nem = NemConnect(main_net=main_net)
     nem.start()
     get_logger()

@@ -29,7 +29,7 @@ class TransactionBuilder:
         else:
             # none transfer tx
             raise Exception("not found transaction version")
-        return hexlify(self.binary)
+        return hexlify(self.binary).decode()
 
     def _common_header(self, tx_dict):
         self.binary += tx_dict['type'].to_bytes(4, "little")  # tx type 0x0101

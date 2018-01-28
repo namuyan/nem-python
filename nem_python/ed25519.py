@@ -104,7 +104,7 @@ class Ed25519:
 
         ecc = SignClass()
         sign = ecc.sign(message, unhexlify(secret_key)[::-1], unhexlify(public_key))
-        return hexlify(sign)
+        return hexlify(sign).decode()
 
     @staticmethod
     def verify(message, signature, public_key):
@@ -131,7 +131,7 @@ class Ed25519:
 
         ecc = SignClass()
         encrypted_hex = ecc.encrypt(unhexlify(_sk)[::-1], unhexlify(_pk), _message)
-        return encrypted_hex
+        return encrypted_hex.decode()
 
     @staticmethod
     def decrypt(private_key, public_key, msg_hex):

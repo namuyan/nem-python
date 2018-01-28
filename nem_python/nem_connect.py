@@ -168,9 +168,10 @@ class NemConnect:
 
                 try:
                     for ck in monitor_cks:
+                        ck = self.byte2str(ck)
                         un = self._get_auto(
                             call="account/unconfirmedTransactions",
-                            data={'address': ck.decode()})
+                            data={'address': ck})
                         for tx in un.json()['data'][::-1]:
                             if 'otherTrans' not in tx['transaction']:
                                 continue  # not multisig
@@ -185,12 +186,12 @@ class NemConnect:
                                 self.unconfirmed_multisig_que.put({
                                     "type": "new",
                                     "tx_hash": tx['meta']['data'],
-                                    "account_ck": ck.decode(),
+                                    "account_ck": ck,
                                     "inner_tx": tx['transaction']['otherTrans'],
                                     "all_cosigner": all_cosigner,
                                     "need_cosigner": account_info['account']['multisigInfo']['minCosignatories'],
                                 })
-                                logging.info("new multisig %s %s" % (ck.decode(), tx['meta']['data']))
+                                logging.info("new multisig %s %s" % (ck, tx['meta']['data']))
 
                             else:
                                 for sign in tx['transaction']['signatures']:
@@ -202,10 +203,10 @@ class NemConnect:
                                         self.unconfirmed_multisig_que.put({
                                             "type": "cosigner",
                                             "tx_hash": tx['meta']['data'],
-                                            "account_ck": ck.decode(),
+                                            "account_ck": ck,
                                             "inner_tx": tx['transaction']['otherTrans'],
                                             "cosigner": sign['otherAccount']})
-                                        logging.info("new cosigner %s %s" % (ck.decode(), sign['otherAccount']))
+                                        logging.info("new cosigner %s %s" % (ck, sign['otherAccount']))
                         else:
                             if len(find_tx_list) > len(monitor_cks) * 50:
                                 # Remove old tx list
@@ -230,6 +231,7 @@ class NemConnect:
                 try:
                     # 新規のアカウントのみ初期化(初期化)
                     for ck in set(self.monitor_cks) - set(monitor_cks):
+                        ck = self.byte2str(ck)
                         new_income = self.get_account_transfer_newest(ck=ck, call_name=self.TRANSFER_INCOMING)
                         tx_reformed = reform_obj.reform_transactions(tx_list=new_income)[::-1]
                         for tx in tx_reformed:
@@ -241,6 +243,7 @@ class NemConnect:
 
                     # モニタリング
                     for ck in monitor_cks:
+                        ck = self.byte2str(ck)
                         new_income = self.get_account_transfer_newest(ck=ck, call_name=self.TRANSFER_INCOMING)
                         tx_reformed = reform_obj.reform_transactions(tx_list=new_income)[::-1]
                         for tx in tx_reformed:
@@ -447,7 +450,7 @@ class NemConnect:
         """
         data = self._get_auto(
             call="account/get",
-            data={"address": ck.decode()})
+            data={"address": ck})
         if not data.ok:
             raise Exception("failed 'account/get' %s" % ck)
         return data.json()
@@ -461,7 +464,7 @@ class NemConnect:
         """
         data = self._get_auto(
             call="account/mosaic/owned",
-            data={"address": ck.decode()})
+            data={"address": ck})
         if not data.ok:
             raise Exception("failed 'account/mosaic/owned' %s" % ck)
         return {
@@ -549,7 +552,7 @@ class NemConnect:
         """
         data = self._get_auto(
             call=call_name,
-            data={'address': ck.decode()})
+            data={'address': ck})
         if not data.ok:
             raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
         return data.json()['data']
@@ -561,7 +564,7 @@ class NemConnect:
         # account/transfers/all
         """
         # tmpファイルの存在確認
-        path = TMP_DIR + '/' + call_name.replace('/', '.') + '.' + ck.decode() + '.json'
+        path = TMP_DIR + '/' + call_name.replace('/', '.') + '.' + ck + '.json'
         cashe = self._tmp_read(path=path, pre=list())
         # 履歴を取得
         while True:
@@ -569,7 +572,7 @@ class NemConnect:
             data = self._get(
                 call=call_name,
                 url=url,
-                data={'address': ck.decode()})
+                data={'address': ck})
             if not data.ok:
                 raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
             j = data.json()['data']
@@ -598,7 +601,7 @@ class NemConnect:
                 data = self._get(
                     call=call_name,
                     url=url,
-                    data={'address': ck.decode(), 'id': page_index})
+                    data={'address': ck, 'id': page_index})
                 if not data.ok:
                     # ここはDDOS防止機構とどう付き合うか考えもの
                     raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
@@ -610,20 +613,20 @@ class NemConnect:
                 result.extend(j)
                 page_index = j[-1]['meta']['id']
             else:
-                logging.error("not completed! %s" % ck.decode())
+                logging.error("not completed! %s" % ck)
                 return result
 
     def get_account_harvests_newest(self, ck):
         data = self._get_auto(
             call="account/harvests",
-            data={'address': ck.decode()})
+            data={'address': ck})
         if not data.ok:
             raise Exception("failed 'account/harvests' %s" % data.json()['message'])
         return data.json()['data']
 
     def get_account_harvests_all(self, ck, c=100):
         # tmpファイルの存在確認
-        path = TMP_DIR + '/' + 'account.harvests.' + ck.decode() + '.json'
+        path = TMP_DIR + '/' + 'account.harvests.' + ck + '.json'
         cashe = self._tmp_read(path=path, pre=list())
         # 履歴を取得
         while True:
@@ -631,7 +634,7 @@ class NemConnect:
             data = self._get(
                 call="account/harvests",
                 url=url,
-                data={'address': ck.decode()})
+                data={'address': ck})
             if not data.ok:
                 raise Exception("failed 'account/harvests' %s" % data.json()['message'])
             j = data.json()['data']
@@ -660,7 +663,7 @@ class NemConnect:
                 data = self._get(
                     call="account/harvests",
                     url=url,
-                    data={'address': ck.decode(), 'id': page_index})
+                    data={'address': ck, 'id': page_index})
                 if not data.ok:
                     # ここはDDOS防止機構とどう付き合うか考えもの
                     raise Exception("failed 'account/harvests' %s" % data.json()['message'])
@@ -672,7 +675,7 @@ class NemConnect:
                 result.extend(j)
                 page_index = j[-1]['id']
             else:
-                logging.error("not completed! %s" % ck.decode())
+                logging.error("not completed! %s" % ck)
                 return result
 
     def get_last_chain(self):
@@ -750,10 +753,10 @@ class NemConnect:
             return {
                 'type': 257,
                 'version': transfer_version,
-                'signer': sender_pk.decode(),
+                'signer': sender_pk,
                 'timeStamp': int(time.time()) - 1427587585,
                 'deadline': int(time.time()) - 1427587585 + 3600 * 2,
-                'recipient': recipient_ck.decode(),
+                'recipient': recipient_ck,
                 'amount': mosaics['nem:xem'],
                 'fee': transfer_fee['nem:xem'],
                 'message': {'type': msg_type, 'payload': hexlify(msg_body).decode()}
@@ -762,10 +765,10 @@ class NemConnect:
             return {
                 'type': 257,
                 'version': transfer_version,
-                'signer': sender_pk.decode(),
+                'signer': sender_pk,
                 'timeStamp': int(time.time()) - 1427587585,
                 'deadline': int(time.time()) - 1427587585 + 3600,
-                'recipient': recipient_ck.decode(),
+                'recipient': recipient_ck,
                 'amount': 1000000,
                 'fee': transfer_fee['nem:xem'],
                 'message': {'type': msg_type, 'payload': hexlify(msg_body).decode()},
@@ -789,11 +792,11 @@ class NemConnect:
         return {
             'type': 4097,
             'version': tx_version,
-            'signer': multisig_pk.decode(),
+            'signer': multisig_pk,
             'timeStamp': int(time.time()) - 1427587585,
             'deadline': int(time.time()) - 1427587585 + 3600 * 2,
             'fee': round(0.5 * 1000000),
-            'modifications': [{'modificationType': 1, 'cosignatoryAccount': p.decode()} for p in cosigner_pks],
+            'modifications': [{'modificationType': 1, 'cosignatoryAccount': p} for p in cosigner_pks],
             'minCosignatories': {'relativeChange': cosigner_require}
         }
 
@@ -803,14 +806,14 @@ class NemConnect:
         modifications = list()
         if add_pk:
             for p in add_pk:
-                modifications.append({'modificationType': 1, 'cosignatoryAccount': p.decode()})
+                modifications.append({'modificationType': 1, 'cosignatoryAccount': p})
         if remove_pk:
             for p in remove_pk:
-                modifications.append({'modificationType': 2, 'cosignatoryAccount': p.decode()})
+                modifications.append({'modificationType': 2, 'cosignatoryAccount': p})
         inner_transaction = {
             "type": 4097,
             'version': tx_version,
-            'signer': multisig_pk.decode(),
+            'signer': multisig_pk,
             'timeStamp': int(time.time()) - 1427587585,
             'deadline': int(time.time()) - 1427587585 + 3600 * 2,
             "fee": round(0.5 * 1000000),
@@ -826,12 +829,12 @@ class NemConnect:
         return {
             "type": 4098,
             "version": transfer_version,
-            "signer": cosigner_pk.decode(),
+            "signer": cosigner_pk,
             "timeStamp": int(time.time()) - 1427587585,
             "deadline": int(time.time()) - 1427587585 + 3600 * 2,
             "fee": 150000,
-            "otherHash": {"data": inner_hash.decode()},
-            "otherAccount": multisig_ck.decode()
+            "otherHash": {"data": inner_hash},
+            "otherAccount": multisig_ck
         }
 
     @staticmethod
@@ -863,7 +866,7 @@ class NemConnect:
         return {
             'type': 4100,
             'version': transfer_version,
-            'signer': cosigner_pk.decode(),
+            'signer': cosigner_pk,
             'timeStamp': int(time.time()) - 1427587585,
             'deadline': int(time.time()) - 1427587585 + 3600 * 2,
             'fee': round(0.15 * 1000000),
@@ -880,14 +883,14 @@ class NemConnect:
             data=tx_dict)
         if not data.ok:
             raise Exception("failed 'transaction/prepare' %s" % data.json()['message'])
-        return data.json()['data'].encode('utf8')
+        return data.json()['data']
 
     def transaction_announce(self, tx_hex, tx_sign):
         data = self._post(
             call="transaction/announce",
             url=self._random_choice_url(),
-            data={'data': tx_hex.decode(),
-                  'signature': tx_sign.decode()}
+            data={'data': self.byte2str(tx_hex),
+                  'signature': self.byte2str(tx_sign)}
         )
         if not data.ok or data.json()['message'] != 'SUCCESS':
             raise Exception("failed 'transaction/announce' %s" % data.json()['message'])
@@ -895,7 +898,7 @@ class NemConnect:
             tx_hash = data.json()['innerTransactionHash']['data']  # multi sig
         except KeyError:
             tx_hash = data.json()['transactionHash']['data']  # single sig
-        return tx_hash.encode('utf8')
+        return tx_hash
 
     def transaction_announce_dev(self, tx_hex, tx_sign):
         # 送金先を３つランダムで選ぶ
@@ -914,8 +917,8 @@ class NemConnect:
             data = self._post(
                 call="transaction/announce",
                 url=url,
-                data={'data': tx_hex.decode(),
-                      'signature': tx_sign.decode()}
+                data={'data': self.byte2str(tx_hex),
+                      'signature': self.byte2str(tx_sign)}
             )
             message = data.json()['message']
             result_message.append(message)
@@ -979,3 +982,11 @@ class NemConnect:
                     NIS_PEERS_SET.remove(url)
             self._tmp_write(path=PEER_FILE, data=NIS_PEERS_SET)
             raise Exception(e)
+
+    @staticmethod
+    def byte2str(b):
+        return b if type(b) == str else b.decode()
+
+    @staticmethod
+    def str2byte(s):
+        return s if type(s) == bytes else s.encode('utf8')

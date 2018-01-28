@@ -44,28 +44,28 @@ nem.get_peers()
  
 # Get account info
 # {'meta': {'cosignatories': [], 'cosignatoryOf': [], 'status': 'LOCKED', 'remoteStatus': 'INACTIVE'}, 'account': {'address': 'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', 'harvestedBlocks': 32, 'balance': 108648716445, 'importance': 2.020618859543048e-05, 'vestedBalance': 104215356130, 'publicKey': 'a7d9eec00e192cdb82df471a7804974c85ba282f7f4272ec5a5dc8f640f267d3', 'label': None, 'multisigInfo': {}}}
-nem.get_account_info(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
+nem.get_account_info(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
  
 # Get account owned mosaics info
 # {'nem:xem': 108648716445, 'gox:gox': 999717 ...}
-nem.get_account_owned_mosaic(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
+nem.get_account_owned_mosaic(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
  
 # Get account newest 25 history, incoming, outgoing, and all.
 # Select by nem.TRANSFER_INCOMING, nem.TRANSFER_OUTGOING, nem.TRANSFER_ALL
 # [{'meta': {'innerHash': {}, 'id': 1568525, 'hash': {'data': '190228b5d149b445dfd1d5633f602b36b9a8374a40a437df46850953ed73e89f'}, 'height': 1475687}, 'transaction': {'timeStamp': 89344239, 'amount': 10000000, 'signature': '0233b15bc70ff2355cb485ee97601ee8a6f2b2d0aeab4b20e5f552259302e8d94662560c33448dd8aabe268cbabccf735d7f92c85fc1e1c2290e3c209365ad05', 'fee': 100000, 'recipient': 'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', 'type': 257, 'deadline': 89430639, 'message': {'payload': '35303530376538643135', 'type': 1}, 'version': 1744830465, 'signer': '6fb74341ad3bd8002e8e8bf84f1ab6cf6eb2308af2f1db619669f5faa9f904b7'}}, {'meta': {'innerHash': {'data': '853c39ecc4d9da1243888ffb9393067a6248862ee03b22bd4acbe3c46505ea88'}, 'id': 1567163, 'hash': {'data': '14d2c6aef0617b5b63b13261235e7e52163c894fc3e6d87c9844f2fb75bbbbd1'}, ...]
-nem.get_account_transfer_newest(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', call_name=nem.TRANSFER_OUTGOING)
+nem.get_account_transfer_newest(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', call_name=nem.TRANSFER_OUTGOING)
  
 # Get account all history, incoming, outgoing, and all.
 # It takes some time and is easy to fail.
-nem.get_account_transfer_all(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', call_name=nem.TRANSFER_OUTGOING)
+nem.get_account_transfer_all(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', call_name=nem.TRANSFER_OUTGOING)
  
 # Get account newest 25 harvests
 # [{'timeStamp': 86631027, 'difficulty': 109604435290570, 'totalFee': 0, 'id': 1436196, 'height': 1430846}, {'timeStamp': 86252769, 'difficulty': 95104743995256, 'totalFee': 150000, 'id': 1429693, 'height': 1424593}, ..]
-nem.get_account_harvests_newest(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
+nem.get_account_harvests_newest(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
  
 # Get account all harvests
 # It takes some time and is easy to fail.
-nem.get_account_harvests_all(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
+nem.get_account_harvests_all(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH')
 ```
 
 ### Send functions
@@ -92,8 +92,8 @@ nem.estimate_levy_fee(mosaics={"dim:coin": 1000, "gold:gold": 10})
 # Simple mosaic transfer transaction object maker
 # msg_type=1 non-encrypted, msg_type=2 encrypted
 # {'type': 257, 'version': 1744830465, 'signer': '80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761', 'timeStamp': 89347608, 'deadline': 89354808, 'recipient': 'NCLW2T3CRAD36NW557T7ABX4BNXWI4AQWHVCB6TK', 'amount': 100000, 'fee': 100000, 'message': {'type': 1, 'payload': '68656c6c6f20776f726c64'}}
-sender_pk = b'80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'  # Sender public key
-recipient_ck = b'NCLW2T3CRAD36NW557T7ABX4BNXWI4AQWHVCB6TK'  # Recipient compressed key
+sender_pk = '80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'  # Sender public key
+recipient_ck = 'NCLW2T3CRAD36NW557T7ABX4BNXWI4AQWHVCB6TK'  # Recipient compressed key
 nem.mosaic_transfer(sender_pk, recipient_ck, mosaics={"nem:xem": 100000}, msg_body=b'hello world')
 ```
 
@@ -105,22 +105,22 @@ nem = NemConnect()
 nem.start()
  
 # sending from multisig account
-cosigner_pk = b'80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'
-multisig_pk = b'28e8469422106f406051a24f2ea6402bac6f1977cf7e02eb3bf8c11d4070157a'
-recipient_ck = b'NCLW2T3CRAD36NW557T7ABX4BNXWI4AQWHVCB6TK'
+cosigner_pk = '80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'
+multisig_pk = '28e8469422106f406051a24f2ea6402bac6f1977cf7e02eb3bf8c11d4070157a'
+recipient_ck = 'NCLW2T3CRAD36NW557T7ABX4BNXWI4AQWHVCB6TK'
 mosaics = {"nem:xem": 10000}
 nem.multisig_mosaics_transfer(cosigner_pk, multisig_pk, recipient_ck, mosaics)
  
 # Create multisig account
-multisig_pk = b'28e8469422106f406051a24f2ea6402bac6f1977cf7e02eb3bf8c11d4070157a'
-cosigner_pks = [b'80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761']
+multisig_pk = '28e8469422106f406051a24f2ea6402bac6f1977cf7e02eb3bf8c11d4070157a'
+cosigner_pks = ['80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761']
 cosigner_require = 0  # 0 means N of N multisig creation
 nem.multisig_account_creation(multisig_pk, cosigner_pks, cosigner_require)
  
 # Modification multisig account
-cosigner_pk = b'80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'
-multisig_pk = b'28e8469422106f406051a24f2ea6402bac6f1977cf7e02eb3bf8c11d4070157a'
-remove_pk = [b'1234....54321']  # remove from cosigner
+cosigner_pk = '80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'
+multisig_pk = '28e8469422106f406051a24f2ea6402bac6f1977cf7e02eb3bf8c11d4070157a'
+remove_pk = ['1234....54321']  # remove from cosigner
 cosigner_change = -1 # relative change, 0 means no change
 nem.multisig_account_modification(cosigner_pk, multisig_pk, remove_pk, cosigner_change)
 ```
@@ -148,8 +148,8 @@ tx_hex = tb.encode(tx_dict)
 print(tx_hex)
  
 # sign transaction
-secret_key = b'6a858fb93e0202fa62f894e591478caa23b06f90471e7976c30fb95efda4b312'
-public_key = b'80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'
+secret_key = '6a858fb93e0202fa62f894e591478caa23b06f90471e7976c30fb95efda4b312'
+public_key = '80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'
 sign = Ed25519.sign(tx_hex, secret_key, public_key)
  
 # broadcast transaction
@@ -195,7 +195,7 @@ from nem_python.transaction_reform import TransactionReform
 nem = NemConnect()
 nem.start()
  
-tx_list = nem.get_account_transfer_newest(ck=b'NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', call_name=nem.TRANSFER_OUTGOING)
+tx_list = nem.get_account_transfer_newest(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', call_name=nem.TRANSFER_OUTGOING)
  
 tr = TransactionReform()
 txs = tr.reform_transactions(tx_list)
@@ -229,7 +229,7 @@ nem = NemConnect()
 nem.start()
  
 # Add monitor Account, it's a exchange address and is good example.
-nem.monitor_cks.append(b'NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA')
+nem.monitor_cks.append('NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA')
  
 while True:
     time.sleep(5)
@@ -239,7 +239,7 @@ while True:
     print(nem.new_received_que.get_nowait())
  
 # You can remove monitor account
-# nem.monitor_cks.remove(b'NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA')
+# nem.monitor_cks.remove('NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA')
 ```
 
 **unconfirmed_multisig_que**  
