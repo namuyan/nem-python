@@ -92,6 +92,8 @@ class NemConnect:
                 ('http', '82.196.9.187', 7890),  # NEMventory
                 ('http', '188.166.14.34', 7890),  # testnet.hxr.team
             })
+        # 今の正確なHeightを挿入
+        self.height = self.get_biggest_height()
         # TMPを初めて作ったので更新
         if create_tmp_now:
             self.f_peer_update = True
@@ -676,6 +678,10 @@ class NemConnect:
     def get_last_chain(self):
         data = self._get_auto(call='chain/last-block')
         return data.json()
+
+    def get_biggest_height(self):
+        data = self._get_auto(call='node/active-peers/max-chain-height')
+        return data.json()['height']
 
     """ sending functions """
 
