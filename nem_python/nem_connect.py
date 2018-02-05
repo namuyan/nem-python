@@ -1,7 +1,6 @@
 #!/user/env python3
 # -*- coding: utf-8 -*-
 
-import queue
 import logging
 import threading
 import random
@@ -14,15 +13,14 @@ from tempfile import gettempdir
 from binascii import hexlify
 from .dict_math import DictMath
 from .transaction_reform import TransactionReform
+from .utils import QueueSystem
+
 
 F_DEBUG = False
 LOCAL_NIS_URL = ("http", "127.0.0.1", 7890)  # transaction_prepareでのみ使用(Debug用)
 ALLOW_NIS_VER = ("0.6.93-BETA", "0.6.95-BETA")  # 使用するNISのVersion
 ALLOW_DIFF_HEIGHT = 2  # 許容するHeightのズレ
 ALLOW_MARGIN_EXP = 5  # NISの経験値？
-TMP_DIR = ""
-PEER_FILE = ""
-NIS_PEERS_SET = set()  # Nisの接続先
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -45,53 +43,46 @@ class NemConnect:
         "levy": {}}
     timeout = 10
     f_peer_update = False
-    unconfirmed_multisig_que = queue.LifoQueue(maxsize=40)
-    new_received_que = queue.LifoQueue(maxsize=40)
-    monitor_cks = list()  # 監視対象CompressedKey
     height = 0  # 現在のBlock高
     finish = False
 
     def __init__(self, main_net=True):
+        self.multisig_que = QueueSystem()
+        self.received_que = QueueSystem()
+        self.monitor_cks = list()  # 監視対象CompressedKey
         self.main_net = main_net
-        create_tmp_now = False
-        global TMP_DIR, PEER_FILE
         # tmpファイルの存在を確認、作成
-        if main_net:
-            TMP_DIR = gettempdir().replace("\\", "/") + '/nem_python'
-            PEER_FILE = TMP_DIR + '/peer.json'
-            if not os.path.isdir(TMP_DIR):
-                os.mkdir(TMP_DIR)
-                create_tmp_now = True
+        self.TMP_DIR = os.path.join(gettempdir(), 'nem_python' + '' if main_net else '_test')
+        self.PEER_FILE = os.path.join(self.TMP_DIR, 'peer.json')
+        if not os.path.exists(self.TMP_DIR):
+            os.mkdir(self.TMP_DIR)
+            create_tmp_now = True
         else:
-            TMP_DIR = gettempdir().replace("\\", "/") + '/nem_python_test'
-            PEER_FILE = TMP_DIR + '/peer.json'
-            if not os.path.isdir(TMP_DIR):
-                os.mkdir(TMP_DIR)
-                create_tmp_now = True
+            create_tmp_now = False
         # Lockファイルを作成
         self.lock = threading.Lock()
         # Peerを内部に保存
-        original_peers = self._tmp_read(path=PEER_FILE, pre=list())
+        original_peers = self._tmp_read(path=self.PEER_FILE, pre=list())
         if len(original_peers) > 5:
-            NIS_PEERS_SET.update({tuple(n) for n in original_peers})
+            self.nis_peers_set = {tuple(n) for n in original_peers}
         elif main_net:
-            NIS_PEERS_SET.update({
+            self.nis_peers_set = {
                 ('http', '62.75.251.134', 7890),  # Hi, I am Alice2
                 ('http', '62.75.163.236', 7890),  # Hi, I am Alice3
                 ('http', '209.126.98.204', 7890),  # Hi, I am Alice4
                 ('http', '108.61.182.27', 7890),  # Hi, I am Alice5
                 ('http', '27.134.245.213', 7890),  # nem4ever
                 ('http', '104.168.152.37', 7890),  # Phatty
-            })
+            }
         else:
-            NIS_PEERS_SET.update({
+            self.nis_peers_set = {
                 ('http', '150.95.145.157', 7890),  # nis-testnet.44uk.net
                 ('http', '104.128.226.60', 7890),  # Hi, I am BigAlice2
                 ('http', '80.93.182.146', 7890),  # hxr.team
                 ('http', '23.228.67.85', 7890),  # Hi, I am MedAlice2
                 ('http', '82.196.9.187', 7890),  # NEMventory
                 ('http', '188.166.14.34', 7890),  # testnet.hxr.team
-            })
+            }
         # 今の正確なHeightを挿入
         self.height = self.get_biggest_height()
         # TMPを初めて作ったので更新
@@ -130,12 +121,12 @@ class NemConnect:
     def _random_choice_url(self):
         while True:
             try:
-                url = random.choice(list(NIS_PEERS_SET))
+                url = random.choice(list(self.nis_peers_set))
                 d = self._get(call='chain/last-block', url=url)
                 height = d.json()['height']
                 if self.height <= height:
                     return url
-                elif len(NIS_PEERS_SET) > 1:
+                elif len(self.nis_peers_set) > 1:
                     continue
                 else:
                     break
@@ -149,7 +140,7 @@ class NemConnect:
             while True:
                 self.f_peer_update = True
                 self.timeout = 3
-                if time.time() - os.stat(PEER_FILE).st_mtime > 3600 * 3:
+                if time.time() - os.stat(self.PEER_FILE).st_mtime > 3600 * 3:
                     # debugﾓｰﾄﾞでないか、3時間以上更新されていない場合、Peerを更新
                     self._update_peers()
                 self.f_peer_update = False
@@ -157,7 +148,7 @@ class NemConnect:
                 time.sleep(3600 * random.random())
 
         # マルチシグ署名依頼
-        # unconfirmed_multisig_que.get()で取得
+        # multisig_que.get()で取得
         def unconfirmed_multisig_check():
             find_tx_list = list()
             monitor_cks = list()
@@ -183,7 +174,7 @@ class NemConnect:
                                     # Not multisig account, may as cosigner
                                     continue
                                 all_cosigner = [u['address'] for u in account_info['meta']['cosignatories']]
-                                self.unconfirmed_multisig_que.put({
+                                self.multisig_que.broadcast({
                                     "type": "new",
                                     "txhash": tx['meta']['data'],
                                     "account": ck,
@@ -200,7 +191,7 @@ class NemConnect:
                                     else:
                                         # new cosigner transaction
                                         find_tx_list.append(sign)
-                                        self.unconfirmed_multisig_que.put({
+                                        self.multisig_que.broadcast({
                                             "type": "cosigner",
                                             "txhash": tx['meta']['data'],
                                             "account": ck,
@@ -212,15 +203,11 @@ class NemConnect:
                                 # Remove old tx list
                                 find_tx_list = find_tx_list[10:]
 
-                except queue.Full:
-                    for dummy in range(40):
-                        self.unconfirmed_multisig_que.get()
-                        logging.info("refresh queue")
                 except Exception as e:
                     logging.debug(e)
 
         # 新着入金を取得
-        # new_received_que.get()で取得
+        # received_que.get()で取得
         def new_received_check():
             find_tx_list = list()
             monitor_cks = list()
@@ -257,16 +244,12 @@ class NemConnect:
                                 height = tx['height']
                                 find_tx_list.append(tx)
                                 logging.info("New income tx %s" % tx['txhash'])
-                                self.new_received_que.put(tx)
+                                self.received_que.broadcast(tx)
 
                     else:
                         if len(find_tx_list) > len(monitor_cks) * 50:
                             find_tx_list = find_tx_list[10:]
 
-                except queue.Full:
-                    for dummy in range(40):
-                        self.new_received_que.get()
-                    logging.info("refresh queue")
                 except Exception as e:
                     logging.debug(e)
 
@@ -349,8 +332,8 @@ class NemConnect:
 
             # ノードリストの更新
             with self.lock:
-                NIS_PEERS_SET.update(result)
-            self._tmp_write(path=PEER_FILE, data=NIS_PEERS_SET)
+                self.nis_peers_set.update(result)
+            self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
             return
         else:
             raise Exception("failed to update peers")
@@ -398,15 +381,14 @@ class NemConnect:
                     logging.debug("%s, %s" % (check_url[1], e))
         return
 
-    @staticmethod
-    def clean_tmp_folder(maxsize=20):
+    def clean_tmp_folder(self, maxsize=20):
         # maxsize Kbyte までTmpファイルが膨れるのを許容する
         path_size_time = list()
         all_size = 0
-        for p in os.listdir(TMP_DIR):
+        for p in os.listdir(self.TMP_DIR):
             if 'peer.json' in p:
                 continue
-            path = TMP_DIR + '/' + p
+            path = os.path.join(self.TMP_DIR, p)
             size = os.path.getsize(path)
             time_ = int(os.stat(path).st_mtime)
             path_size_time.append((path, size, time_))
@@ -425,10 +407,10 @@ class NemConnect:
 
     """ rest api methods """
     def get_peers(self):
-        original_peers = self._tmp_read(path=PEER_FILE, pre=list())
-        NIS_PEERS_SET.update({tuple(n) for n in original_peers})
-        self._tmp_write(path=PEER_FILE, data=NIS_PEERS_SET)
-        return NIS_PEERS_SET
+        original_peers = self._tmp_read(path=self.PEER_FILE, pre=list())
+        self.nis_peers_set.update({tuple(n) for n in original_peers})
+        self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
+        return self.nis_peers_set
 
     def get_account_info(self, ck):
         """
@@ -564,7 +546,7 @@ class NemConnect:
         # account/transfers/all
         """
         # tmpファイルの存在確認
-        path = TMP_DIR + '/' + call_name.replace('/', '.') + '.' + ck + '.json'
+        path = os.path.join(self.TMP_DIR, call_name.replace('/', '.') + '.' + ck + '.json')
         cashe = self._tmp_read(path=path, pre=list())
         # 履歴を取得
         while True:
@@ -626,7 +608,7 @@ class NemConnect:
 
     def get_account_harvests_all(self, ck, c=100):
         # tmpファイルの存在確認
-        path = TMP_DIR + '/' + 'account.harvests.' + ck + '.json'
+        path = os.path.join(self.TMP_DIR, 'account.harvests.' + ck + '.json')
         cashe = self._tmp_read(path=path, pre=list())
         # 履歴を取得
         while True:
@@ -946,9 +928,9 @@ class NemConnect:
             return requests.get(uri, params=data, headers=headers, timeout=self.timeout)
         except Exception as e:
             with self.lock:
-                if url in NIS_PEERS_SET:
-                    NIS_PEERS_SET.remove(url)
-            self._tmp_write(path=PEER_FILE, data=NIS_PEERS_SET)
+                if url in self.nis_peers_set:
+                    self.nis_peers_set.remove(url)
+            self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
             raise Exception(e)
 
     def _get_auto(self, call, data=None):
@@ -962,9 +944,9 @@ class NemConnect:
                 return requests.get(uri, params=data, headers=headers, timeout=self.timeout)
             except Exception as e:
                 with self.lock:
-                    if url in NIS_PEERS_SET:
-                        NIS_PEERS_SET.remove(url)
-                self._tmp_write(path=PEER_FILE, data=NIS_PEERS_SET)
+                    if url in self.nis_peers_set:
+                        self.nis_peers_set.remove(url)
+                self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
                 logging.error(e)
                 continue
         else:
@@ -978,9 +960,9 @@ class NemConnect:
             return requests.post(uri, data=json.dumps(data), headers=headers, timeout=self.timeout)
         except Exception as e:
             with self.lock:
-                if url in NIS_PEERS_SET:
-                    NIS_PEERS_SET.remove(url)
-            self._tmp_write(path=PEER_FILE, data=NIS_PEERS_SET)
+                if url in self.nis_peers_set:
+                    self.nis_peers_set.remove(url)
+            self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
             raise Exception(e)
 
     @staticmethod

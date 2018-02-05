@@ -5,8 +5,8 @@ nem-python is simple NEM library.
 
 Feature
 -------
-* Do not require NIS running on local.
-* You can sign on this library.
+* Do **not** require NIS running on local.
+* You can sign on **offline**.
 * Useful transaction builder.
 * Useful simplify transaction.
 

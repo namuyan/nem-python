@@ -227,6 +227,9 @@ from nem_python.nem_connect import NemConnect
 import time
 nem = NemConnect()
 nem.start()
+# Create que
+multisig_que = nem.multisig_que.create()
+received_que = nem.received_que.create()
  
 # Add monitor Account, it's a exchange address and is good example.
 nem.monitor_cks.append('NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA')
@@ -234,9 +237,9 @@ nem.monitor_cks.append('NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA')
 while True:
     time.sleep(5)
     # check multisig tx
-    print(nem.unconfirmed_multisig_que.get_nowait())
+    print(multisig_que.get_nowait())
     # check new incoming
-    print(nem.new_received_que.get_nowait())
+    print(received_que.get_nowait())
  
 # You can remove monitor account
 # nem.monitor_cks.remove('NAGJG3QFWYZ37LMI7IQPSGQNYADGSJZGJRD2DIYA')
