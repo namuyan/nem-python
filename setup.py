@@ -32,7 +32,7 @@ setup(
     long_description=readme,
     packages=find_packages(),
     license="MIT",
-    install_requires=['requests', 'fasteners', 'pycrypto'],
+    install_requires=['requests', 'fasteners', 'pycryptodomex'],
     classifiers=[
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',

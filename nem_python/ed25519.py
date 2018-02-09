@@ -14,7 +14,7 @@ import os
 import base64
 from binascii import hexlify, unhexlify
 from operator import getitem, methodcaller
-from Crypto.Cipher import AES
+from Cryptodome.Cipher import AES
 from .python_sha3 import sha3_256, sha3_512
 
 Point = collections.namedtuple('Point', ['x', 'y'])

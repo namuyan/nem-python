@@ -9,4 +9,4 @@ __all__ = [
     DictMath, Ed25519, NemConnect,
     TransactionBuilder, TransactionReform,
     QueueSystem]
-__version__ = "0.1.0"
+__version__ = '0.1.1'

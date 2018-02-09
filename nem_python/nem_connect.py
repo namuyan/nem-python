@@ -56,9 +56,9 @@ class NemConnect:
         self.PEER_FILE = os.path.join(self.TMP_DIR, 'peer.json')
         if not os.path.exists(self.TMP_DIR):
             os.mkdir(self.TMP_DIR)
-            create_tmp_now = True
+            self.create_tmp_now = True
         else:
-            create_tmp_now = False
+            self.create_tmp_now = False
         # Lockファイルを作成
         self.lock = threading.Lock()
         # Peerを内部に保存
@@ -85,13 +85,6 @@ class NemConnect:
             }
         # 今の正確なHeightを挿入
         self.height = self.get_biggest_height()
-        # TMPを初めて作ったので更新
-        if create_tmp_now:
-            self.f_peer_update = True
-            self.timeout = 3
-            self._update_peers()
-            self.f_peer_update = False
-            self.timeout = 10
 
     def stop(self):
         while True:
@@ -142,6 +135,10 @@ class NemConnect:
                 self.timeout = 3
                 if time.time() - os.stat(self.PEER_FILE).st_mtime > 3600 * 3:
                     # debugﾓｰﾄﾞでないか、3時間以上更新されていない場合、Peerを更新
+                    self._update_peers()
+                elif self.create_tmp_now:
+                    # TMPを初めて作ったので更新
+                    self.create_tmp_now = False
                     self._update_peers()
                 self.f_peer_update = False
                 self.timeout = 10
@@ -665,8 +662,10 @@ class NemConnect:
         return data.json()
 
     def get_biggest_height(self):
-        data = self._get_auto(call='node/active-peers/max-chain-height')
-        return data.json()['height']
+        while True:
+            data = self._get_auto(call='node/active-peers/max-chain-height')
+            if 'height' in data.json():
+                return data.json()['height']
 
     """ sending functions """
 
