@@ -12,7 +12,7 @@ class QueueSystem:
         self.lock = threading.Lock()
 
     def create(self):
-        que = queue.LifoQueue(maxsize=10)
+        que = queue.LifoQueue(maxsize=25)
         with self.lock:
             self.que.append(que)
         return que

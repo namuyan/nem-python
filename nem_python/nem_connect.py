@@ -18,7 +18,7 @@ from .utils import QueueSystem
 
 F_DEBUG = False
 LOCAL_NIS_URL = ("http", "127.0.0.1", 7890)  # transaction_prepareでのみ使用(Debug用)
-ALLOW_NIS_VER = ("0.6.93-BETA", "0.6.95-BETA")  # 使用するNISのVersion
+ALLOW_NIS_VER = ["0.6.93-BETA", "0.6.95-BETA"]  # 使用するNISのVersion
 ALLOW_DIFF_HEIGHT = 2  # 許容するHeightのズレ
 ALLOW_MARGIN_EXP = 5  # NISの経験値？
 
@@ -42,6 +42,7 @@ class NemConnect:
             {"name": "transferable", "value": "true"}],
         "levy": {}}
     timeout = 10
+    retention = 3600 * 2  # 2 hours
     f_peer_update = False
     height = 0  # 現在のBlock高
     finish = False
@@ -589,6 +590,15 @@ class NemConnect:
                 if len(j) == 0:
                     self._tmp_write(path=path, data=result)
                     return result
+                else:
+                    # Casheをチェック
+                    oldest_tx = j[-1]['transaction']
+                    for i in range(min(25, len(cashe))):
+                        if oldest_tx == cashe[i]['transaction']:
+                            result += j + cashe[i + 1:]
+                            self._tmp_write(path=path, data=result)
+                            return result
+
                 result.extend(j)
                 page_index = j[-1]['meta']['id']
             else:
@@ -651,6 +661,15 @@ class NemConnect:
                 if len(j) == 0:
                     self._tmp_write(path=path, data=result)
                     return result
+                else:
+                    # Casheをチェック
+                    oldest_tx = j[-1]['height']
+                    for i in range(min(25, len(cashe))):
+                        if oldest_tx == cashe[i]['height']:
+                            result += j + cashe[i + 1:]
+                            self._tmp_write(path=path, data=result)
+                            return result
+
                 result.extend(j)
                 page_index = j[-1]['id']
             else:
@@ -736,7 +755,7 @@ class NemConnect:
                 'version': transfer_version,
                 'signer': sender_pk,
                 'timeStamp': int(time.time()) - 1427587585,
-                'deadline': int(time.time()) - 1427587585 + 3600 * 2,
+                'deadline': int(time.time()) - 1427587585 + self.retention,
                 'recipient': recipient_ck,
                 'amount': mosaics['nem:xem'],
                 'fee': transfer_fee['nem:xem'],
@@ -748,7 +767,7 @@ class NemConnect:
                 'version': transfer_version,
                 'signer': sender_pk,
                 'timeStamp': int(time.time()) - 1427587585,
-                'deadline': int(time.time()) - 1427587585 + 3600,
+                'deadline': int(time.time()) - 1427587585 + self.retention,
                 'recipient': recipient_ck,
                 'amount': 1000000,
                 'fee': transfer_fee['nem:xem'],
@@ -775,7 +794,7 @@ class NemConnect:
             'version': tx_version,
             'signer': multisig_pk,
             'timeStamp': int(time.time()) - 1427587585,
-            'deadline': int(time.time()) - 1427587585 + 3600 * 2,
+            'deadline': int(time.time()) - 1427587585 + self.retention,
             'fee': round(0.5 * 1000000),
             'modifications': [{'modificationType': 1, 'cosignatoryAccount': p} for p in cosigner_pks],
             'minCosignatories': {'relativeChange': cosigner_require}
@@ -796,7 +815,7 @@ class NemConnect:
             'version': tx_version,
             'signer': multisig_pk,
             'timeStamp': int(time.time()) - 1427587585,
-            'deadline': int(time.time()) - 1427587585 + 3600 * 2,
+            'deadline': int(time.time()) - 1427587585 + self.retention,
             "fee": round(0.5 * 1000000),
             "modifications": modifications,
             "minCosignatories": {"relativeChange": cosigner_change}}
@@ -812,7 +831,7 @@ class NemConnect:
             "version": transfer_version,
             "signer": cosigner_pk,
             "timeStamp": int(time.time()) - 1427587585,
-            "deadline": int(time.time()) - 1427587585 + 3600 * 2,
+            "deadline": int(time.time()) - 1427587585 + self.retention,
             "fee": 150000,
             "otherHash": {"data": inner_hash},
             "otherAccount": multisig_ck
@@ -849,7 +868,7 @@ class NemConnect:
             'version': transfer_version,
             'signer': cosigner_pk,
             'timeStamp': int(time.time()) - 1427587585,
-            'deadline': int(time.time()) - 1427587585 + 3600 * 2,
+            'deadline': int(time.time()) - 1427587585 + self.retention,
             'fee': round(0.15 * 1000000),
             'otherTrans': inner_transaction
         }
@@ -922,7 +941,7 @@ class NemConnect:
         try:
             headers = {'Content-type': 'application/json'}
             uri = "%s://%s:%d/%s" % (url[0], url[1], url[2], call)
-            if not self.f_peer_update:
+            if not self.f_peer_update and call != 'chain/last-block':
                 logging.debug("Access GET %s (%s)" % (uri, data))
             return requests.get(uri, params=data, headers=headers, timeout=self.timeout)
         except Exception as e:

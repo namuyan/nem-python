@@ -5,6 +5,7 @@
 class DictMath:
     @staticmethod
     def add(a, b):
+        # result = a + b
         c = dict()
         keys = set(a) | set(b)
         for k in keys:
@@ -14,6 +15,7 @@ class DictMath:
 
     @staticmethod
     def sub(a, b):
+        # result = a - b
         c = dict()
         keys = set(a) | set(b)
         for k in keys:
