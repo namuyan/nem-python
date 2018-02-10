@@ -27,8 +27,10 @@ class TransactionReform:
         4 = not decrypted message(utf8 hex)
 
     """
-    def __init__(self, main_net=True, your_sk=None):
+
+    def __init__(self, main_net=True, your_sk=None, your_ck=None):
         self.ecc = Ed25519(main_net=main_net)
+        self.your_ck = your_ck
         self.your_sk = your_sk
 
     def reform_transactions(self, tx_list):
@@ -38,8 +40,10 @@ class TransactionReform:
             for tx_dict in tx_list:
                 tx_type = self._tx_version(tx_dict)
                 if 0x0101 == tx_type:
-                    his.append(self._reform_transaction(tx_dict))
-
+                    try:
+                        his.append(self._reform_transaction(tx_dict))
+                    except TransactionReformError as e:
+                        continue
             return his
         else:
             return list()
@@ -58,13 +62,18 @@ class TransactionReform:
             # wrapper tx
             inner_tx = tx['transaction']['otherTrans']
             r['txtype'] = inner_tx['type']
-            r['txhash'] = tx['meta']['hash']['data']
+            r['txhash'] = tx['meta']['innerHash']['data']
             r['height'] = tx['meta']['height']
             r['version'] = inner_tx['version']
             r['time'] = inner_tx['timeStamp'] + 1427587585
             r['deadline'] = inner_tx['deadline'] + 1427587585
 
+            r['sender'] = self.pk2ck(inner_tx['signer']).decode()
             r['recipient'] = inner_tx['recipient']
+
+            # マルチシグTXでは子署名者も含まれるので除く
+            if self.your_ck is not None and self.your_ck not in (r['sender'], r['recipient']):
+                raise TransactionReformError('You are not sender or recipient.')
 
             if 'mosaics' not in inner_tx:
                 # ver1 tx
@@ -153,3 +162,6 @@ class TransactionReform:
 
     def pk2ck(self, pk):
         return self.ecc.get_address(pk)
+
+
+class TransactionReformError(Exception): pass

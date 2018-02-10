@@ -53,7 +53,7 @@ class NemConnect:
         self.monitor_cks = list()  # 監視対象CompressedKey
         self.main_net = main_net
         # tmpファイルの存在を確認、作成
-        self.TMP_DIR = os.path.join(gettempdir(), 'nem_python' + '' if main_net else '_test')
+        self.TMP_DIR = os.path.join(gettempdir(), 'nem_python' + ('' if main_net else '_test'))
         self.PEER_FILE = os.path.join(self.TMP_DIR, 'peer.json')
         if not os.path.exists(self.TMP_DIR):
             os.mkdir(self.TMP_DIR)
@@ -210,7 +210,6 @@ class NemConnect:
             find_tx_list = list()
             monitor_cks = list()
             height = 0
-            reform_obj = TransactionReform(main_net=self.main_net)
             while True:
                 time.sleep(5)
                 try:
@@ -218,6 +217,7 @@ class NemConnect:
                     for ck in set(self.monitor_cks) - set(monitor_cks):
                         ck = self.byte2str(ck)
                         new_income = self.get_account_transfer_newest(ck=ck, call_name=self.TRANSFER_INCOMING)
+                        reform_obj = TransactionReform(main_net=self.main_net, your_ck=ck)
                         tx_reformed = reform_obj.reform_transactions(tx_list=new_income)[::-1]
                         for tx in tx_reformed:
                             if tx not in find_tx_list:
@@ -230,6 +230,7 @@ class NemConnect:
                     for ck in monitor_cks:
                         ck = self.byte2str(ck)
                         new_income = self.get_account_transfer_newest(ck=ck, call_name=self.TRANSFER_INCOMING)
+                        reform_obj = TransactionReform(main_net=self.main_net, your_ck=ck)
                         tx_reformed = reform_obj.reform_transactions(tx_list=new_income)[::-1]
                         for tx in tx_reformed:
                             if tx in find_tx_list:

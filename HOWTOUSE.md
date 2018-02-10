@@ -159,6 +159,10 @@ print(tx_hash)
 
 ### reform transaction
 Simplify transaction data.  
+CAUTION:  
+If you reform multisig transaction, you need to check sender or recipient is your ck.  
+NIS output your cosigner tx of multisig.
+ 
 * message_type
     * 0 = no message(unicode)
     * 1 = plain message(unicode)
@@ -195,7 +199,8 @@ from nem_python.transaction_reform import TransactionReform
 nem = NemConnect()
 nem.start()
  
-tx_list = nem.get_account_transfer_newest(ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH', call_name=nem.TRANSFER_OUTGOING)
+ck='NCR2CQE6AI3DIRHPHEPBSVDBOQFSHXFSQF4NIUAH'
+tx_list = nem.get_account_transfer_newest(ck, call_name=nem.TRANSFER_OUTGOING)
  
 tr = TransactionReform()
 txs = tr.reform_transactions(tx_list)
