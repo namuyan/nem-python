@@ -14,7 +14,7 @@ Require
 -------
 Python3 (>=3.5)
 
-HowToUse
+how to use
 -----
 ```python
 from nem_python.nem_connect import NemConnect
@@ -22,7 +22,12 @@ nem = NemConnect(main_net=True)
 nem.start()
 ```
 
-[HOWTOUSE.md](HOWTOUSE.md)
+[all class](doc/CLASS.md)
+[basic usage](doc/BASIC-USAGE.md)
+[sending](doc/SENDING.md)
+[multisig](doc/MULTISIG.md)
+[receive check](doc/RECEIVE-CHECK.md)
+[reform](doc/REFORM.md)
 
 Samples
 ------
