@@ -222,7 +222,8 @@ class NemConnect:
                         for tx in tx_reformed:
                             if tx not in find_tx_list:
                                 find_tx_list.append(tx)
-                        height = max(height, tx_reformed[-1]['height'])
+                        if len(tx_reformed) > 0:
+                            height = max(height, tx_reformed[-1]['height'])
                     else:
                         monitor_cks = copy.copy(self.monitor_cks)
 
@@ -250,6 +251,8 @@ class NemConnect:
                             find_tx_list = find_tx_list[10:]
 
                 except Exception as e:
+                    import traceback
+                    traceback.print_exc()
                     logging.debug(e)
 
         # Block高の更新
@@ -269,6 +272,8 @@ class NemConnect:
                     else:
                         prev_hash, height = new_prev_hash, new_height
                         self.height = new_height
+                        if new_height % 20 == 0:
+                            logging.debug("Now block %d" % new_height)
 
                 except KeyError:
                     continue
