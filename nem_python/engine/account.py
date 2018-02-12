@@ -23,19 +23,19 @@ F_DEBUG = True
 class Account(threading.Thread):
     max_int = 256 ** 5 - 1
     outsider_id = 1
-    owner_id = 2
+    expired_id = 2
+    owner_id = 3
     confirm_height = 3
     f_close = False
     f_at_first = False
 
-    def __init__(self, nem, pk, prices, sk=None, main_net=True):
+    def __init__(self, nem, pk, sk=None, main_net=True):
         super().__init__(name='Account', daemon=True)
         assert isinstance(pk, str), 'pk is string format'
         self.f_ok = False
         self.nem = nem
         self.sk = sk
         self.pk = pk
-        self.prices = prices
         self.main_net = main_net
         self.ecc = Ed25519(main_net=main_net)
         self.ck = self.ecc.get_address(pk=pk.encode()).decode()
@@ -57,11 +57,18 @@ class Account(threading.Thread):
     def create_connect(self):
         return sqlite3.connect(database=self.db_path, isolation_level=self.iso_level)
 
-    def get_price(self, mosaic):
-        return self.prices[mosaic] if mosaic in self.prices else 0.0
+    def get_price(self, mosaic, db=None):
+        if db is None:
+            db = self.db
+        with db as conn:
+            f = conn.execute("""
+            SELECT `price` FROM `price_table` WHERE `mosaic` = ?
+            ORDER BY `height` DESC LIMIT 1""", (mosaic,))
+            price = f.fetchone()
+        return 0.0 if price is None else price[0]
 
-    def get_value(self, mosaic, amount):
-        return int(self.get_price(mosaic) * amount)
+    def get_value(self, mosaic, amount, db=None):
+        return int(self.get_price(mosaic, db=db) * amount)
 
     def run(self):
         logging.info("Start account engine")
@@ -234,6 +241,35 @@ class Account(threading.Thread):
             return [i for (i,) in ids]
         return list()
 
+    def update_price(self, mosaic, price, db=None):
+        assert price >= 0, 'price is more than zero.'
+        if db is None:
+            db = self.db
+        try:
+            self.nem.estimate_levy_fee(mosaics={mosaic: 1})  # Check existence
+        except:
+            raise AccountError('\"%s\" isn\'t exist.' % mosaic)
+
+        if self.nem.height <= 1:
+            raise AccountError('Nem height is 0, try nem.start()')
+        with db as conn:
+            conn.execute("""
+            INSERT INTO `price_table` VALUES (?, ?, ?, ?)
+            """, (mosaic, price, self.nem.height, int_time()))
+            conn.commit()
+
+    def get_prices(self, db=None):
+        if db is None:
+            db = self.db
+        with db as conn:
+            f = conn.execute("""
+            SELECT DISTINCT `mosaic`, `price` FROM `price_table`
+            """)
+            prices = f.fetchall()
+            if prices:
+                return {m: p for m, p in prices}
+            return dict()
+
     """ BALANCE ACTIONS """
 
     def balance(self, userid, db=None):
@@ -309,18 +345,27 @@ class Account(threading.Thread):
     """ SENDING ACTIONS """
 
     def send(self, from_id, to_address, mosaics, msg=b'', only_check=True, encrypted=False, db=None):
+        if db is None:
+            db = self.db
         assert self.sk is not None, 'You need sk if you use \"send\"'
         to_address = to_address.replace('-', '')
-        assert to_address != self.ck, "You send to and receive to same address."
-        fee = self.nem.estimate_levy_fee(mosaics)
-        fee = DictMath.add(fee, self.nem.estimate_msg_fee(msg))
-        fee = DictMath.add(fee, self.nem.estimate_send_fee(mosaics))
+        if to_address == self.ck:
+            raise AccountError("You send to and receive to same address.")
+        for mosaic in mosaics:
+            self._check_expire_mosaic(mosaic, db)
         if encrypted:
-            msg = self.ecc.encrypt(self.sk, self.pk, msg)
-            msg = unhexlify(msg.encode())
+            to_pk = self.nem.get_account_info(ck=to_address)['account']['publicKey']
+            if to_pk is None:
+                raise AccountError('You send encrypt msg to Account that have never send before.')
+            # Generally cannot convert CK to PK.
+            msg_hex = self.ecc.encrypt(self.sk, to_pk, msg)
+            msg = unhexlify(msg_hex.encode())
             msg_type = 2
         else:
             msg_type = 1
+        fee = self.nem.estimate_levy_fee(mosaics)
+        fee = DictMath.add(fee, self.nem.estimate_msg_fee(msg))
+        fee = DictMath.add(fee, self.nem.estimate_send_fee(mosaics))
         tx_dict = self.nem.mosaic_transfer(self.pk, to_address, mosaics, msg, msg_type)
         tb = TransactionBuilder()
         tx_hex = tb.encode(tx_dict)
@@ -333,8 +378,6 @@ class Account(threading.Thread):
             return fee, send_ok, tx_dict, tx_hex, tx_sign
         else:
             with self.transaction:
-                if db is None:
-                    db = self.db
                 with db as conn:
                     conn.commit()
                     balance = self.balance(from_id)
@@ -346,8 +389,8 @@ class Account(threading.Thread):
                     for mosaic in need_amount:
                         # height, time is None
                         amount = need_amount[mosaic]
-                        value = self.get_value(mosaic, amount)
-                        price = self.get_price(mosaic)
+                        value = self.get_value(mosaic, amount, db=db)
+                        price = self.get_price(mosaic, db=db)
                         outgoing_many.append((
                             unhexlify(tx_hash.encode()), None, from_id, mosaic, amount, value, price, None
                         ))
@@ -356,7 +399,7 @@ class Account(threading.Thread):
                     """, outgoing_many)
                     conn.commit()
                 threading.Thread(target=self._send, name='Wait',
-                                 args=(tx_hash, db), daemon=False).start()
+                                 args=(tx_hash,), daemon=False).start()
             return tx_hash
 
     def _send(self, txhash):
@@ -380,6 +423,12 @@ class Account(threading.Thread):
                 logging.info("Sending success 0x%s" % txhash)
                 db.close()
                 return
+        # remove unconfirmed sending tx
+        with db as conn:
+            conn.execute("""
+            DELETE `outgoing_table` WHERE `txhahs` = ?
+            """, (unhexlify(txhash.encode()),))
+            conn.commit()
         logging.info("Failed sending 0x%s" % txhash)
 
     def move_by_group(self, from_group, to_group, mosaics, db=None):
@@ -418,6 +467,9 @@ class Account(threading.Thread):
                     if f.fetchone() is not None:
                         raise AccountError('Already inserted txhash to incoming_table.')
 
+                # Check expired mosaic
+                for mosaic in mosaics:
+                    self._check_expire_mosaic(mosaic, db)
                 height = height if height else self.nem.height
                 assert to_id or from_id, "sender and receiver is unknown."
                 if balance_check:
@@ -426,7 +478,8 @@ class Account(threading.Thread):
                         raise AccountError('You try to withdraw beyond ID:%d have.' % from_id)
                 if to_id != self.outsider_id:
                     incoming = [  # to_idに入金される
-                                  (txhash, height, to_id, m, a, self.get_value(m, a), self.get_price(m), time_int)
+                                  (txhash, height, to_id, m, a, self.get_value(m, a, db=db),
+                                   self.get_price(m, db=db), time_int)
                                   for m, a in sorted(mosaics.items())]
                     conn.executemany("""
                     INSERT INTO `incoming_table` VALUES (
@@ -434,7 +487,8 @@ class Account(threading.Thread):
 
                 if from_id != self.outsider_id:
                     outgoing = [  # from_idから出金される
-                                  (txhash, height, from_id, m, a, self.get_value(m, a), self.get_price(m), time_int)
+                                  (txhash, height, from_id, m, a, self.get_value(m, a, db=db),
+                                   self.get_price(m, db=db), time_int)
                                   for m, a in sorted(mosaics.items())]
                     conn.executemany("""
                     INSERT INTO `outgoing_table` VALUES (
@@ -469,6 +523,14 @@ class Account(threading.Thread):
                 `address` TEXT UNIQUE, `group` TEXT, `tag` INTEGER UNIQUE,
                 `time` INTEGER
                 )""")
+                db.execute("""
+                CREATE TABLE `price_table` (
+                `mosaic` TEXT, `price` REAL,`height` INTEGER, `time` INTEGER
+                )""")
+                db.execute("""
+                CREATE TABLE `namespace_table` (
+                `top_domain` TEXT, `height` INTEGER, `time` INTEGER
+                )""")
                 execute = """
                 CREATE INDEX `idx_incoming_txhash` ON `incoming_table` (`txhash`)
                 CREATE INDEX `idx_incoming_height` ON `incoming_table` (`height`)
@@ -479,6 +541,8 @@ class Account(threading.Thread):
                 CREATE INDEX `idx_user_address` ON `user_table` (`address`)
                 CREATE INDEX `idx_user_group` ON `user_table` (`group`)
                 CREATE INDEX `idx_user_tag` ON `user_table` (`tag`)
+                CREATE INDEX `idx_price_mosaic` ON `price_table` (`mosaic`)
+                CREATE INDEX `idx_namespace_top_domain` ON `namespace_table` (`top_domain`)
                 """.split("\n")
                 for code in execute:
                     if len(code) > 10:
@@ -486,6 +550,8 @@ class Account(threading.Thread):
                 # Add unknown user add
                 if self.create_user(group='@outsider', db=db)[0] != self.outsider_id:
                     raise AccountError('OutsiderID differ from created.')
+                if self.create_user(group='@expired', db=db)[0] != self.expired_id:
+                    raise AccountError('ExpiredID differ from created.')
                 if self.create_user(group='@owner', db=db)[0] != self.owner_id:
                     raise AccountError('OwnerID differ from created.')
                 # Outsider's tag is None
@@ -498,6 +564,82 @@ class Account(threading.Thread):
                 db.close()
                 os.remove(self.db_path)
                 assert AccountError('Failed create db, %s' % e)
+
+    def _check_expire_mosaic(self, namespace, db=None):
+        # check expire at move or send action
+        if db is None:
+            db = self.db
+        with db as conn:
+            if ':' in namespace:
+                namespace = namespace.split(':')[0]
+            top_domain = namespace.split('.')[0]
+            if top_domain == 'nem':
+                return  # not expired
+            f = conn.execute("""
+            SELECT `height` FROM `namespace_table` WHERE `top_domain` = ?
+            ORDER BY `height` DESC""", (top_domain,))
+            height = f.fetchone()
+            height = height[0] if height else None
+            max_span_height = 365 * 24 * 3600
+            try:
+                new_height = self.nem.get_namespace_regist_height(top_domain)
+            except:
+                new_height = None
+
+            print(height, new_height)
+            if new_height is None:
+                raise AccountError('unknown namespace found \"%s\"' % namespace)
+            elif height is None:
+                # find new mosaic
+                conn.execute("""
+                INSERT INTO `namespace_table` VALUES (?, ?, ?)
+                """, (top_domain, new_height, int_time()))
+                conn.commit()
+            elif height == new_height:
+                return  # not expired
+            elif new_height - height > max_span_height:
+                # find expired and new other user lent
+                f = conn.execute("""
+                SELECT `txhash`, `userid`, `mosaic` FROM `incoming_table`
+                WHERE `mosaic` GLOB '{}[.:]*'""".format(top_domain))
+                delete_income = f.fetchall()
+                if delete_income:
+                    conn.executemany("""
+                    UPDATE `incoming_table` SET `userid` = '{}' WHERE
+                    `txhash` = ?, `userid` = ?, `mosaic` = ?
+                    """.format(self.expired_id), delete_income)
+                    with open(os.path.join(self.data_dir, 'expired.incoming.log'), mode='a') as f:
+                        for txhash, userid, mosaic in delete_income:
+                            txhash = hexlify(txhash).decode()
+                            f.write("txhash=0x{}, userid={}, moaic={}\n".format(txhash, userid, mosaic))
+
+                # outgoing delete
+                f = conn.execute("""
+                SELECT `txhash`, `userid`, `mosaic` FROM `outgoing_table`
+                WHERE `mosaic` GLOB '{}[.:]*'""".format(top_domain))
+                delete_outgo = f.fetchall()
+                if delete_outgo:
+                    conn.executemany("""
+                    UPDATE `outgoing_table` SET `userid` = '{}' WHERE
+                    `txhash` = ?, `userid` = ?, `mosaic` = ?
+                    """.format(self.expired_id), delete_outgo)
+                    with open(os.path.join(self.data_dir, 'expired.outgoing.log'), mode='a') as f:
+                        for txhash, userid, mosaic in delete_outgo:
+                            txhash = hexlify(txhash).decode()
+                            f.write("txhash=0x{}, userid={}, moaic={}\n".format(txhash, userid, mosaic))
+
+                conn.execute("""
+                INSERT INTO `namespace_table` VALUES (?, ?, ?)
+                """, (top_domain, new_height, int_time()))
+                conn.commit()
+            elif new_height - height <= max_span_height:
+                # relent namespace by same user
+                conn.execute("""
+                INSERT INTO `namespace_table` VALUES (?, ?, ?)
+                """, (top_domain, new_height, int_time()))
+                conn.commit()
+            else:
+                raise AccountError('Unexpected status')
 
     def _get_history(self, call):
         count = 100
@@ -541,9 +683,10 @@ class Account(threading.Thread):
                     traceback.print_exc()
                     userid, tag = self.create_user(group='@unknown', db=db)
                 for mosaic in tx['coin']:
+                    self._check_expire_mosaic(mosaic, db=db)
                     amount = tx['coin'][mosaic]
-                    value = self.get_value(mosaic, amount)
-                    price = self.get_price(mosaic)
+                    value = self.get_value(mosaic, amount, db=db)
+                    price = self.get_price(mosaic, db=db)
                     incoming_many.append((
                         txhash, height, userid, mosaic, amount, value, price, tx['time']
                     ))
@@ -582,11 +725,12 @@ class Account(threading.Thread):
                     fee = DictMath.add(fee, {'nem:xem': tx['fee']})
                     all_amount = DictMath.add(fee, tx['coin'])
                     for mosaic in all_amount:
+                        self._check_expire_mosaic(mosaic, db=db)
                         amount = all_amount[mosaic]
                         if amount == 0:
                             continue
-                        value = self.get_value(mosaic, amount)
-                        price = self.get_price(mosaic)
+                        value = self.get_value(mosaic, amount, db=db)
+                        price = self.get_price(mosaic, db=db)
                         outgoing_many.append((
                             txhash, height, userid, mosaic, amount, value, price, tx['time']
                         ))

@@ -487,6 +487,16 @@ class NemConnect:
                 result.update(tmp)
                 continue
 
+    def get_namespace_regist_height(self, namespace):
+        top_namespace = namespace.split('.')[0]
+        if top_namespace == 'nem':
+            raise NemConnectError('\"nem\" is ')
+        else:
+            d = self._get_auto(call='namespace', data={'namespace': top_namespace})
+            if not d.ok:
+                raise NemConnectError('Not found namespace.')
+            return d.json()['height']
+
     def get_mosaic_supply(self, namespace_name):
         data = self._get_auto(
             call='mosaic/supply',
@@ -996,3 +1006,6 @@ class NemConnect:
     @staticmethod
     def str2byte(s):
         return s if type(s) == bytes else s.encode('utf8')
+
+
+class NemConnectError(Exception): pass
