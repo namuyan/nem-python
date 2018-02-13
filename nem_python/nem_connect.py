@@ -725,8 +725,9 @@ class NemConnect:
                     supply=self.get_mosaic_supply(namespace_name),
                     divi=divi, factor=factor)
 
-        logging.info("send fee: %s XEM" % fee)
-        return {"nem:xem": round(fee * 1000000)}
+        fee_int = round(fee * 1000000)
+        logging.info("send fee: %s XEM" % (fee_int / 1000000))
+        return {"nem:xem": fee_int}
 
     @staticmethod
     def estimate_msg_fee(msg, factor=20):

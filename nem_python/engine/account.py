@@ -54,22 +54,6 @@ class Account(threading.Thread):
         self._check_new_creation()
         self.db = self.create_connect()
 
-    def create_connect(self):
-        return sqlite3.connect(database=self.db_path, isolation_level=self.iso_level)
-
-    def get_price(self, mosaic, db=None):
-        if db is None:
-            db = self.db
-        with db as conn:
-            f = conn.execute("""
-            SELECT `price` FROM `price_table` WHERE `mosaic` = ?
-            ORDER BY `height` DESC LIMIT 1""", (mosaic,))
-            price = f.fetchone()
-        return 0.0 if price is None else price[0]
-
-    def get_value(self, mosaic, amount, db=None):
-        return int(self.get_price(mosaic, db=db) * amount)
-
     def run(self):
         logging.info("Start account engine")
         received_que = self.nem.received_que.create()
@@ -132,18 +116,74 @@ class Account(threading.Thread):
             db.close()
             return
 
+    """ SYSTEM ACTIONS """
+
+    def create_connect(self):
+        return sqlite3.connect(database=self.db_path, isolation_level=self.iso_level)
+
     def backup(self):
         import shutil
         with self.transaction:
-            name = 'backup.%d.db' % int_time()
+            name = 'account.%s.db.%d.bak' % (self.ck, int_time())
             shutil.copyfile(src=self.db_path, dst=os.path.join(self.data_dir, name))
 
-    def debug(self, sql):
+    def debug(self, sql, explain=True):
         if F_DEBUG:
-            f = self.db.execute(sql)
+            f = self.db.execute(('explain query plan ' if explain else '') + sql)
+            if explain:
+                return f.fetchone()[-1]
             return f.fetchall()
 
-    """ USER ACTIONS """
+    def refresh(self, db=None):
+        if db is None:
+            db = self.db
+        db.commit()
+
+    """ INNER PRICE ACTIONS """
+
+    def update_price(self, mosaic, price, db=None):
+        assert price >= 0, 'price is more than zero.'
+        if db is None:
+            db = self.db
+        try:
+            self.nem.estimate_levy_fee(mosaics={mosaic: 1})  # Check existence
+        except:
+            raise AccountError('\"%s\" isn\'t exist.' % mosaic)
+
+        if self.nem.height <= 1:
+            raise AccountError('Nem height is 0, try nem.start()')
+        with db as conn:
+            conn.execute("""
+            INSERT INTO `price_table` VALUES (?, ?, ?, ?)
+            """, (mosaic, price, self.nem.height, int_time()))
+            conn.commit()
+
+    def get_prices(self, db=None):
+        if db is None:
+            db = self.db
+        with db as conn:
+            f = conn.execute("""
+            SELECT DISTINCT `mosaic`, `price` FROM `price_table`
+            """)
+            prices = f.fetchall()
+            if prices:
+                return {m: p for m, p in prices}
+            return dict()
+
+    def get_price(self, mosaic, db=None):
+        if db is None:
+            db = self.db
+        with db as conn:
+            f = conn.execute("""
+            SELECT `price` FROM `price_table` WHERE `mosaic` = ?
+            ORDER BY `height` DESC LIMIT 1""", (mosaic,))
+            price = f.fetchone()
+        return 0.0 if price is None else price[0]
+
+    def get_value(self, mosaic, amount, db=None):
+        return int(self.get_price(mosaic, db=db) * amount)
+
+    """ ACCOUNT ACTIONS """
 
     def create_user(self, address=None, group=None, db=None):
         # tag無しor見知らぬAddressからの入金は毎回Userを作る
@@ -241,42 +281,12 @@ class Account(threading.Thread):
             return [i for (i,) in ids]
         return list()
 
-    def update_price(self, mosaic, price, db=None):
-        assert price >= 0, 'price is more than zero.'
-        if db is None:
-            db = self.db
-        try:
-            self.nem.estimate_levy_fee(mosaics={mosaic: 1})  # Check existence
-        except:
-            raise AccountError('\"%s\" isn\'t exist.' % mosaic)
-
-        if self.nem.height <= 1:
-            raise AccountError('Nem height is 0, try nem.start()')
-        with db as conn:
-            conn.execute("""
-            INSERT INTO `price_table` VALUES (?, ?, ?, ?)
-            """, (mosaic, price, self.nem.height, int_time()))
-            conn.commit()
-
-    def get_prices(self, db=None):
-        if db is None:
-            db = self.db
-        with db as conn:
-            f = conn.execute("""
-            SELECT DISTINCT `mosaic`, `price` FROM `price_table`
-            """)
-            prices = f.fetchall()
-            if prices:
-                return {m: p for m, p in prices}
-            return dict()
-
     """ BALANCE ACTIONS """
 
     def balance(self, userid, db=None):
         if db is None:
             db = self.db
         with db as conn:
-            conn.commit()
             f = conn.execute("""
             SELECT `mosaic`, SUM(`amount`)
             FROM `incoming_table`
@@ -296,20 +306,45 @@ class Account(threading.Thread):
             balance = DictMath.sub(incoming, outgoing)
         return balance
 
-    def balance_group(self, db=None):
+    def balance_group(self, group, db=None):
         if db is None:
             db = self.db
         with db as conn:
-            conn.commit()
+            user_list = self.id_of_group(group, db=db)
+            if len(user_list) == 0:
+                raise AccountError('not found group.')
+            user_list_str = ', '.join(map(str, user_list))
+            f = conn.execute("""
+             SELECT `mosaic`, SUM(`amount`)
+            FROM `incoming_table`
+            WHERE `userid` IN (%s)
+            GROUP BY `mosaic`
+            """ % user_list_str)
+            balance = f.fetchall()
+            incoming = {m: a for m, a in balance} if balance else dict()
+            f = conn.execute("""
+            SELECT `mosaic`, SUM(`amount`)
+            FROM `outgoing_table`
+            WHERE `userid` IN (%s)
+            GROUP BY `mosaic`
+            """ % user_list_str)
+            balance = f.fetchall()
+            outgoing = {m: a for m, a in balance} if balance else dict()
+            return DictMath.sub(incoming, outgoing)
+
+    def balance_all_group(self, db=None):
+        if db is None:
+            db = self.db
+        with db as conn:
             f = conn.execute("""
             SELECT `userid`, `group` FROM `user_table`
             """)
             group = dict()
-            for u, g in f.fetchall():
+            for userid, g in f.fetchall():
                 if g in group:
-                    group[g].append(str(u))
+                    group[g].append(str(userid))
                 else:
-                    group[g] = [str(u)]
+                    group[g] = [str(userid)]
             balance = dict()
             for g in group:
                 f = conn.execute("""
@@ -319,7 +354,16 @@ class Account(threading.Thread):
                 GROUP BY `mosaic`
                 """ % ', '.join(group[g]))
                 _balance = f.fetchall()
-                balance[g] = {m: a for m, a in _balance} if _balance else dict()
+                incoming = {m: a for m, a in _balance} if _balance else dict()
+                f = conn.execute("""
+                SELECT `mosaic`, SUM(`amount`)
+                FROM `outgoing_table`
+                WHERE `userid` IN (%s)
+                GROUP BY `mosaic`
+                """ % ', '.join(group[g]))
+                _balance = f.fetchall()
+                outgoing = {m: a for m, a in _balance} if _balance else dict()
+                balance[g] = DictMath.sub(incoming, outgoing)
             return balance
 
     def history(self, userid, db=None):
@@ -342,9 +386,55 @@ class Account(threading.Thread):
         else:
             return list()
 
+    def history_group(self, group, db=None):
+        if db is None:
+            db = self.db
+        use_list = self.id_of_group(group=group, db=db)
+        if len(use_list) == 0:
+            raise AccountError('Not found group.')
+        with db as conn:
+            f = conn.execute("""
+            SELECT
+                `type`, LOWER(HEX(`txhash`)), `height`, `mosaic`, `amount`, `value`, `price`, `time`
+            FROM (
+            SELECT 'incoming' AS 'type', * FROM `incoming_table` WHERE userid IN ({0})
+                UNION
+            SELECT 'outgoing' AS 'type', * FROM `outgoing_table` WHERE userid IN ({0})
+            ) AS `tmp` ORDER BY `height` DESC
+            """.format(', '.join(map(str, use_list))))
+            # type 'incoming' or 'outgoing'
+            transaction = f.fetchall()
+        if transaction:
+            return transaction
+        else:
+            return list()
+
     """ SENDING ACTIONS """
 
-    def send(self, from_id, to_address, mosaics, msg=b'', only_check=True, encrypted=False, db=None):
+    def send_by_group(self, from_group, to_address, mosaics, msg=b'', encrypted=False, db=None):
+        # groupとして登録IDが最小のUserは残高がマイナスになることがある
+        user_list = self.id_of_group(from_group, db=db)
+        if len(user_list) == 0:
+            raise AccountError('Not found group')
+        balance = self.balance_group(from_group, db=db)
+        fee, *dummy = self.send(
+            from_id=user_list[0], to_address=to_address,
+            mosaics=mosaics, msg=msg, only_check=True, balance_check=False,
+            encrypted=encrypted, db=db)
+        need_amount = DictMath.add(mosaics, fee)
+        if DictMath.all_plus_amount(DictMath.sub(balance, need_amount)):
+            txhash = self.send(
+                from_id=user_list[0], to_address=to_address,
+                mosaics=mosaics, msg=msg,
+                only_check=False, balance_check=False, encrypted=encrypted,
+                db=db)
+            return txhash
+        else:
+            need = {m: a for m, a in DictMath.sub(balance, need_amount).items() if a < 0}
+            raise AccountError('Not enough balance on group, %s' % need)
+
+    def send(self, from_id, to_address, mosaics, msg=b'', only_check=True, balance_check=True, encrypted=False,
+             db=None):
         if db is None:
             db = self.db
         assert self.sk is not None, 'You need sk if you use \"send\"'
@@ -378,12 +468,13 @@ class Account(threading.Thread):
             return fee, send_ok, tx_dict, tx_hex, tx_sign
         else:
             with self.transaction:
+                self.refresh(db=db)
                 with db as conn:
-                    conn.commit()
                     balance = self.balance(from_id)
                     need_amount = DictMath.add(fee, mosaics)
-                    if not DictMath.all_plus_amount(DictMath.sub(balance, need_amount)):
-                        raise AccountError('You try to withdraw beyond ID:%d have.' % from_id)
+                    if balance_check and not DictMath.all_plus_amount(DictMath.sub(balance, need_amount)):
+                        need = {m: a for m, a in DictMath.sub(balance, need_amount).items() if a < 0}
+                        raise AccountError('Not enough balance on ID:%d, %s' % (from_id, need))
                     tx_hash = self.nem.transaction_announce(tx_hex, tx_sign)
                     outgoing_many = list()
                     for mosaic in need_amount:
@@ -432,16 +523,20 @@ class Account(threading.Thread):
         logging.info("Failed sending 0x%s" % txhash)
 
     def move_by_group(self, from_group, to_group, mosaics, db=None):
-        assert from_group is not None, 'You need to set from_group'
-        assert to_group is not None, 'You need to set to_group'
-        from_id = self.find_user(group=from_group)
-        to_id = self.find_user(group=to_group)
-        balance = self.balance_group(db=db)
-        remain = DictMath.sub(balance[from_group], mosaics)
+        from_user_list = self.id_of_group(from_group, db=db)
+        to_user_list = self.id_of_group(to_group, db=db)
+        if len(from_user_list) == 0 or len(to_user_list) == 0:
+            raise AccountError('Not found group.')
+        balance = self.balance_group(from_group, db=db)
+        remain = DictMath.sub(balance, mosaics)
         if DictMath.all_plus_amount(remain):
-            return self.move(from_id=from_id, to_id=to_id, mosaics=mosaics, balance_check=False, db=db)
+            return self.move(
+                from_id=from_user_list[0], to_id=to_user_list[0],
+                mosaics=mosaics, balance_check=False,
+                db=db)
         else:
-            raise AccountError('You try to move more balance than from_id have.')
+            need = {m: a for m, a in DictMath.sub(balance, mosaics).items() if a < 0}
+            raise AccountError('Not enough balance on group, %s' % need)
 
     def move(self, from_id, to_id, mosaics, time_int=None, balance_check=True, txhash=None, height=None, db=None):
         assert from_id != to_id, "Account of sender and recipient is same."
@@ -449,7 +544,7 @@ class Account(threading.Thread):
             db = self.db
         with db as conn:
             with self.transaction:
-                conn.commit()
+                self.refresh(db=db)
                 if time_int is None:
                     time_int = int_time()
                 if txhash is None:
@@ -475,7 +570,8 @@ class Account(threading.Thread):
                 if balance_check:
                     balance = self.balance(from_id)
                     if not DictMath.all_plus_amount(DictMath.sub(balance, mosaics)):
-                        raise AccountError('You try to withdraw beyond ID:%d have.' % from_id)
+                        need = {m: a for m, a in DictMath.sub(balance, mosaics).items() if a < 0}
+                        raise AccountError('Not enough balance on ID:%d, %s' % (from_id, need))
                 if to_id != self.outsider_id:
                     incoming = [  # to_idに入金される
                                   (txhash, height, to_id, m, a, self.get_value(m, a, db=db),
@@ -496,7 +592,7 @@ class Account(threading.Thread):
                 conn.commit()
         return hexlify(txhash).decode()
 
-    # Inner actions
+    """ Inner actions """
     def _check_new_creation(self):
         if os.path.exists(self.db_path):
             return
@@ -557,8 +653,8 @@ class Account(threading.Thread):
                 # Outsider's tag is None
                 db.execute("""
                 UPDATE `user_table` SET `tag` = NULL
-                WHERE `userid` = ?
-                """, (self.outsider_id,))
+                WHERE `userid` IN (?, ?)
+                """, (self.outsider_id, self.expired_id))
                 db.commit()
             except sqlite3.Error as e:
                 db.close()
@@ -586,7 +682,7 @@ class Account(threading.Thread):
             except:
                 new_height = None
 
-            print(height, new_height)
+            print("Expire check DB={}, API={}".format(height, new_height))
             if new_height is None:
                 raise AccountError('unknown namespace found \"%s\"' % namespace)
             elif height is None:
@@ -661,11 +757,17 @@ class Account(threading.Thread):
         outgoing = tr.reform_transactions(outgoing)[::-1]
 
         with db as conn:
-            conn.commit()
+            self.refresh(db=db)
             incoming_many = list()
             for tx in incoming:
                 if tx['recipient'] != self.ck:
                     continue
+                if self.nem.height < tx['height'] + self.confirm_height:
+                    threading.Thread(target=self._confirm, name='Confirm',
+                                     args=(tx,), daemon=True).start()
+                    logging.info("Unconfirmed receive 0x%s" % tx['txhash'])
+                    continue  # 十分な認証Block数が過ぎていない
+
                 txhash = unhexlify(tx['txhash'].encode())
                 f = conn.execute("""
                 SELECT `txhash` FROM `incoming_table` WHERE `txhash`= ? """, (txhash,))
