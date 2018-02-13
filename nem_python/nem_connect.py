@@ -126,7 +126,7 @@ class NemConnect:
                     break
             except:
                 pass
-        raise Exception("run out of API connection pool.")
+        raise NemConnectError("run out of API connection pool.")
 
     def start(self):
         # Peerリスト自動更新
@@ -340,7 +340,7 @@ class NemConnect:
             self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
             return
         else:
-            raise Exception("failed to update peers")
+            raise NemConnectError("failed to update peers")
 
     def _check_peer(self, peers, result, lock, best_height):
         network_id = 104 if self.main_net else -104
@@ -438,7 +438,7 @@ class NemConnect:
             call="account/get",
             data={"address": ck})
         if not data.ok:
-            raise Exception("failed 'account/get' %s" % ck)
+            raise NemConnectError("failed 'account/get' %s" % ck)
         return data.json()
 
     def get_account_owned_mosaic(self, ck):
@@ -452,7 +452,7 @@ class NemConnect:
             call="account/mosaic/owned",
             data={"address": ck})
         if not data.ok:
-            raise Exception("failed 'account/mosaic/owned' %s" % ck)
+            raise NemConnectError("failed 'account/mosaic/owned' %s" % ck)
         return {
             "{}:{}".format(e['mosaicId']['namespaceId'], e['mosaicId']['name']): e['quantity']
             for e in data.json()['data']}
@@ -502,7 +502,7 @@ class NemConnect:
             call='mosaic/supply',
             data={'mosaicId': namespace_name})
         if not data.ok:
-            raise Exception("failed 'mosaic/supply' %s" % data.json()['message'])
+            raise NemConnectError("failed 'mosaic/supply' %s" % data.json()['message'])
         return data.json()['supply']
 
     def get_account_transfer_newest(self, ck, call_name=TRANSFER_INCOMING):
@@ -550,7 +550,7 @@ class NemConnect:
             call=call_name,
             data={'address': ck})
         if not data.ok:
-            raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
+            raise NemConnectError("failed '%s' %s" % (call_name, data.json()['message']))
         return data.json()['data']
 
     def get_account_transfer_all(self, ck, call_name=TRANSFER_INCOMING, c=100):
@@ -570,7 +570,7 @@ class NemConnect:
                 url=url,
                 data={'address': ck})
             if not data.ok:
-                raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
+                raise NemConnectError("failed '%s' %s" % (call_name, data.json()['message']))
             j = data.json()['data']
 
             # TXがまだ存在しない場合
@@ -600,7 +600,7 @@ class NemConnect:
                     data={'address': ck, 'id': page_index})
                 if not data.ok:
                     # ここはDDOS防止機構とどう付き合うか考えもの
-                    raise Exception("failed '%s' %s" % (call_name, data.json()['message']))
+                    raise NemConnectError("failed '%s' %s" % (call_name, data.json()['message']))
                 j = data.json()['data']
 
                 if len(j) == 0:
@@ -626,7 +626,7 @@ class NemConnect:
             call="account/harvests",
             data={'address': ck})
         if not data.ok:
-            raise Exception("failed 'account/harvests' %s" % data.json()['message'])
+            raise NemConnectError("failed 'account/harvests' %s" % data.json()['message'])
         return data.json()['data']
 
     def get_account_harvests_all(self, ck, c=100):
@@ -641,7 +641,7 @@ class NemConnect:
                 url=url,
                 data={'address': ck})
             if not data.ok:
-                raise Exception("failed 'account/harvests' %s" % data.json()['message'])
+                raise NemConnectError("failed 'account/harvests' %s" % data.json()['message'])
             j = data.json()['data']
 
             # TXがまだ存在しない場合
@@ -671,7 +671,7 @@ class NemConnect:
                     data={'address': ck, 'id': page_index})
                 if not data.ok:
                     # ここはDDOS防止機構とどう付き合うか考えもの
-                    raise Exception("failed 'account/harvests' %s" % data.json()['message'])
+                    raise NemConnectError("failed 'account/harvests' %s" % data.json()['message'])
                 j = data.json()['data']
 
                 if len(j) == 0:
@@ -716,7 +716,7 @@ class NemConnect:
                 namespace, name = namespace_name.split(":")
                 definition = self.get_namespace2definition(namespace=namespace)
                 if namespace_name not in definition:
-                    raise Exception("not found mosaic: %s" % namespace_name)
+                    raise NemConnectError("not found mosaic: %s" % namespace_name)
                 for p in definition[namespace_name]['properties']:
                     if p['name'] == 'divisibility':
                         divi = int(p['value'])
@@ -747,7 +747,7 @@ class NemConnect:
             namespace, name = namespace_name.split(':')
             d = self.get_namespace2definition(namespace)
             if namespace_name not in d:
-                raise Exception("not found mosaic %s" % namespace_name)
+                raise NemConnectError("not found mosaic %s" % namespace_name)
             if len(d[namespace_name]['levy']) == 0:
                 continue
 
@@ -893,13 +893,13 @@ class NemConnect:
     """ broadcast functions """
     def transaction_prepare(self, tx_dict):
         if not F_DEBUG:
-            raise Exception('Need to setup local NIS for prepare method.')
+            raise NemConnectError('Need to setup local NIS for prepare method.')
         data = self._post(
             call="transaction/prepare",
             url=LOCAL_NIS_URL,
             data=tx_dict)
         if not data.ok:
-            raise Exception("failed 'transaction/prepare' %s" % data.json()['message'])
+            raise NemConnectError("failed 'transaction/prepare' %s" % data.json()['message'])
         return data.json()['data']
 
     def transaction_announce_old(self, tx_hex, tx_sign):
@@ -910,7 +910,7 @@ class NemConnect:
                   'signature': self.byte2str(tx_sign)}
         )
         if not data.ok or data.json()['message'] != 'SUCCESS':
-            raise Exception("failed 'transaction/announce' %s" % data.json()['message'])
+            raise NemConnectError("failed 'transaction/announce' %s" % data.json()['message'])
         try:
             txhash = data.json()['innerTransactionHash']['data']  # multi sig
         except KeyError:
@@ -952,7 +952,7 @@ class NemConnect:
         if 'SUCCESS' in result_message and len(result_txhash) > 0:
             return result_txhash[0]
         else:
-            raise Exception("failed 'transaction/announce' %s" % result_message)
+            raise NemConnectError("failed 'transaction/announce' %s" % result_message)
 
     def _get(self, call, url, data=None):
         try:
@@ -966,7 +966,7 @@ class NemConnect:
                 if url in self.nis_peers_set:
                     self.nis_peers_set.remove(url)
             self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
-            raise Exception(e)
+            raise NemConnectError(e)
 
     def _get_auto(self, call, data=None):
         retry = 10
@@ -985,7 +985,7 @@ class NemConnect:
                 logging.error(e)
                 continue
         else:
-            raise Exception("many retry error '%s', %s" % (call, data))
+            raise NemConnectError("many retry error '%s', %s" % (call, data))
 
     def _post(self, call, url, data=None):
         try:
@@ -998,7 +998,7 @@ class NemConnect:
                 if url in self.nis_peers_set:
                     self.nis_peers_set.remove(url)
             self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
-            raise Exception(e)
+            raise NemConnectError(e)
 
     @staticmethod
     def byte2str(b):
