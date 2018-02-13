@@ -10,7 +10,6 @@ import random
 from binascii import unhexlify, hexlify
 import fasteners
 from tempfile import gettempdir
-from ..nem_connect import NemConnect
 from ..transaction_reform import TransactionReform
 from ..transaction_builder import TransactionBuilder
 from ..dict_math import DictMath
@@ -65,8 +64,11 @@ class Account(threading.Thread):
         self.f_ok = True
         while True:
             receive = received_que.get()
-            threading.Thread(target=self._confirm, name='Confirm', args=(receive,), daemon=True).start()
-            logging.info("New incoming 0x%s" % receive['txhash'])
+            if receive['recipient'] == self.ck:
+                logging.info("New incoming 0x%s" % receive['txhash'])
+                threading.Thread(target=self._confirm, name='Confirm', args=(receive,), daemon=True).start()
+            else:
+                logging.info("None related 0x%s" % receive['txhash'])
 
     def _confirm(self, receive):
         tr = TransactionReform(main_net=self.main_net, your_ck=self.ck)
