@@ -10,10 +10,12 @@ import random
 from binascii import unhexlify, hexlify
 import fasteners
 from tempfile import gettempdir
+from nem_ed25519.key import get_address, is_address
+from nem_ed25519.signature import sign
+from nem_ed25519.encrypt import encrypt
 from ..transaction_reform import TransactionReform
 from ..transaction_builder import TransactionBuilder
 from ..dict_math import DictMath
-from ..ed25519 import Ed25519
 from .utils import int_time, tag2hex, msg2tag
 
 F_DEBUG = True
@@ -36,8 +38,7 @@ class Account(threading.Thread):
         self.sk = sk
         self.pk = pk
         self.main_net = main_net
-        self.ecc = Ed25519(main_net=main_net)
-        self.ck = self.ecc.get_address(pk=pk.encode()).decode()
+        self.ck = get_address(pk, main_net=main_net)
         dir_name = 'nem_python' + ('' if main_net else '_test')
         # data and tmp dir settings
         self.data_dir = os.path.join(os.path.expanduser('~'), dir_name)
@@ -443,6 +444,9 @@ class Account(threading.Thread):
         to_address = to_address.replace('-', '')
         if to_address == self.ck:
             raise AccountError("You send to and receive to same address.")
+        elif not is_address(to_address):
+            raise AccountError('Not correct address format.')
+
         for mosaic in mosaics:
             self._check_expire_mosaic(mosaic, db)
         if encrypted:
@@ -450,8 +454,7 @@ class Account(threading.Thread):
             if to_pk is None:
                 raise AccountError('You send encrypt msg to Account that have never send before.')
             # Generally cannot convert CK to PK.
-            msg_hex = self.ecc.encrypt(self.sk, to_pk, msg)
-            msg = unhexlify(msg_hex.encode())
+            msg = encrypt(self.sk, to_pk, msg)
             msg_type = 2
         else:
             msg_type = 1
@@ -461,13 +464,14 @@ class Account(threading.Thread):
         tx_dict = self.nem.mosaic_transfer(self.pk, to_address, mosaics, msg, msg_type)
         tb = TransactionBuilder()
         tx_hex = tb.encode(tx_dict)
-        tx_sign = self.ecc.sign(tx_hex, self.sk, self.pk)
+        sign_raw = sign(msg=unhexlify(tx_hex.encode()), sk=self.sk, pk=self.pk)
+        sign_hex = hexlify(sign_raw).decode()
         if only_check:
             balance = self.balance(from_id)
             need_amount = DictMath.add(fee, mosaics)
             send_ok = DictMath.all_plus_amount(DictMath.sub(balance, need_amount))
             # only_check=False return sending info, NOT send
-            return fee, send_ok, tx_dict, tx_hex, tx_sign
+            return fee, send_ok, tx_dict, tx_hex, sign_hex
         else:
             with self.transaction:
                 self.refresh(db=db)
@@ -477,7 +481,7 @@ class Account(threading.Thread):
                     if balance_check and not DictMath.all_plus_amount(DictMath.sub(balance, need_amount)):
                         need = {m: a for m, a in DictMath.sub(balance, need_amount).items() if a < 0}
                         raise AccountError('Not enough balance on ID:%d, %s' % (from_id, need))
-                    tx_hash = self.nem.transaction_announce(tx_hex, tx_sign)
+                    tx_hash = self.nem.transaction_announce(tx_hex, sign_hex)
                     outgoing_many = list()
                     for mosaic in need_amount:
                         # height, time is None
