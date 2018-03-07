@@ -96,7 +96,7 @@ class TransactionBuilder:
 
         is_mainnet = tx_dict['version'] == 1744830464
         cosigners = {
-            get_address(e['cosignatoryAccount'].encode('utf8'), main_net=is_mainnet):
+            get_address(e['cosignatoryAccount'], main_net=is_mainnet):
                 (e['modificationType'], e['cosignatoryAccount'])
             for e in tx_dict['modifications']}
 
