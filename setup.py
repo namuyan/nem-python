@@ -31,8 +31,8 @@ setup(
     description='Package Dependency: Validates package requirements',
     long_description=readme,
     packages=find_packages(),
+    include_package_data=True,
     license="MIT Licence",
-    install_requires=['requests', 'fasteners', 'pycryptodomex', 'nem-ed25519'],
     classifiers=[
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
