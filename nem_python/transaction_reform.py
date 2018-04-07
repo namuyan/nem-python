@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 from binascii import unhexlify
-from .ed25519 import Ed25519
+from nem_ed25519.key import get_address
+from nem_ed25519.encrypt import decrypt
 
 
 class TransactionReform:
@@ -29,7 +30,7 @@ class TransactionReform:
     """
 
     def __init__(self, main_net=True, your_sk=None, your_ck=None):
-        self.ecc = Ed25519(main_net=main_net)
+        self.main_net = main_net
         self.your_ck = your_ck
         self.your_sk = your_sk
 
@@ -68,7 +69,7 @@ class TransactionReform:
             r['time'] = inner_tx['timeStamp'] + 1427587585
             r['deadline'] = inner_tx['deadline'] + 1427587585
 
-            r['sender'] = self.pk2ck(inner_tx['signer']).decode()
+            r['sender'] = self.pk2ck(inner_tx['signer'])
             r['recipient'] = inner_tx['recipient']
 
             # マルチシグTXでは子署名者も含まれるので除く
@@ -102,7 +103,7 @@ class TransactionReform:
             r['time'] = tx['transaction']['timeStamp'] + 1427587585
             r['deadline'] = tx['transaction']['deadline'] + 1427587585
 
-            r['sender'] = self.pk2ck(tx['transaction']['signer']).decode()
+            r['sender'] = self.pk2ck(tx['transaction']['signer'])
             r['recipient'] = tx['transaction']['recipient']
 
             if 'mosaics' not in tx['transaction']:
@@ -143,9 +144,9 @@ class TransactionReform:
 
             elif tran['message']['type'] == 2:
                 # 暗号化メッセージ
-                msg_hex = tran['message']['payload'].encode('utf-8')
+                msg_hex = tran['message']['payload'].encode()
                 try:
-                    r['message'] = self.ecc.decrypt(self.your_sk, tran['signer'], msg_hex)
+                    r['message'] = decrypt(sk=self.your_sk, pk=tran['signer'], enc=unhexlify(msg_hex))
                     r['message_type'] = 2
                 except:
                     r['message'] = msg_hex.decode()
@@ -161,7 +162,7 @@ class TransactionReform:
         return r
 
     def pk2ck(self, pk):
-        return self.ecc.get_address(pk)
+        return get_address(pk, main_net=self.main_net)
 
 
 class TransactionReformError(Exception): pass

@@ -31,11 +31,12 @@ setup(
     description='Package Dependency: Validates package requirements',
     long_description=readme,
     packages=find_packages(),
-    license="MIT",
-    install_requires=['requests', 'fasteners', 'pycryptodomex'],
+    include_package_data=True,
+    license="MIT Licence",
     classifiers=[
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'License :: OSI Approved :: MIT License',
     ],
 )

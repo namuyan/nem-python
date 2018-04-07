@@ -30,9 +30,4 @@ Account
 Off-chain solution.
 You can edit balance of many users for one address virtually.
 
-Ed25519
--------
-`from nem_python.ed25519 import Ed25519`  
-Encryption class. sign, verify, encrypt, decrypt.
-
 [GO BACK](../README.md)

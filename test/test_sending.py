@@ -4,10 +4,10 @@
 
 from nem_python.nem_connect import NemConnect
 from nem_python.dict_math import DictMath
-from nem_python.ed25519 import Ed25519
 from nem_python.transaction_builder import TransactionBuilder
 from nem_python.transaction_reform import TransactionReform
-import logging
+from binascii import hexlify, unhexlify
+from nem_ed25519.signature import sign
 
 
 def multisig_sending():
@@ -27,9 +27,10 @@ def multisig_sending():
     tb = TransactionBuilder()
     tx_hex = tb.encode(tx_dict)
     print("tx hex:", tx_hex)
-    sign = Ed25519.sign(tx_hex, cosigner_sk, cosigner_pk)
-    print("sign", sign)
-    r = nem.transaction_announce(tx_hex, sign)
+    sign_raw = sign(msg=unhexlify(tx_hex.encode()), sk=cosigner_sk, pk=cosigner_pk)
+    sign_hex = hexlify(sign_raw).decode()
+    print("sign", sign_hex)
+    r = nem.transaction_announce(tx_hex, sign_hex)
     print(r)
 
 

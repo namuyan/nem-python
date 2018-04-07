@@ -40,7 +40,8 @@ broadcast
 ```python
 from nem_python.nem_connect import NemConnect
 from nem_python.transaction_builder import TransactionBuilder
-from nem_python.ed25519 import Ed25519
+from nem_ed25519.signature import sign
+from binascii import unhexlify, hexlify
  
 nem = NemConnect()
 nem.start()
@@ -61,10 +62,11 @@ print(tx_hex)
 # sign transaction
 secret_key = '6a858fb93e0202fa62f894e591478caa23b06f90471e7976c30fb95efda4b312'
 public_key = '80d2ae0d784d28db38b5b85fd77e190981cea6f4328235ec173a90c2853c0761'
-sign = Ed25519.sign(tx_hex, secret_key, public_key)
+sign_raw = sign(msg=unhexlify(tx_hex.encode()), sk=secret_key, pk=public_key)
+sign_hex = hexlify(sign_raw).decode()
  
 # broadcast transaction
-tx_hash = nem.transaction_announce(tx_hex, sign)
+tx_hash = nem.transaction_announce(tx_hex, sign_hex)
 print(tx_hash)
 ```
 

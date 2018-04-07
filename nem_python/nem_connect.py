@@ -13,7 +13,7 @@ from tempfile import gettempdir
 from binascii import hexlify
 from .dict_math import DictMath
 from .transaction_reform import TransactionReform
-from .utils import QueueSystem
+from .utils import QueueSystem, PeerStorage
 
 
 F_DEBUG = False
@@ -63,27 +63,26 @@ class NemConnect:
         # Lockファイルを作成
         self.lock = threading.Lock()
         # Peerを内部に保存
-        original_peers = self._tmp_read(path=self.PEER_FILE, pre=list())
-        if len(original_peers) > 5:
-            self.nis_peers_set = {tuple(n) for n in original_peers}
-        elif main_net:
-            self.nis_peers_set = {
+        self.peers = PeerStorage(path=self.PEER_FILE)
+        if main_net and len(self.peers) < 5:
+            self.peers.update({
                 ('http', '62.75.251.134', 7890),  # Hi, I am Alice2
                 ('http', '62.75.163.236', 7890),  # Hi, I am Alice3
                 ('http', '209.126.98.204', 7890),  # Hi, I am Alice4
                 ('http', '108.61.182.27', 7890),  # Hi, I am Alice5
                 ('http', '27.134.245.213', 7890),  # nem4ever
                 ('http', '104.168.152.37', 7890),  # Phatty
-            }
-        else:
-            self.nis_peers_set = {
+            })
+        elif len(self.peers) < 5:
+            self.peers.update({
                 ('http', '150.95.145.157', 7890),  # nis-testnet.44uk.net
                 ('http', '104.128.226.60', 7890),  # Hi, I am BigAlice2
                 ('http', '80.93.182.146', 7890),  # hxr.team
                 ('http', '23.228.67.85', 7890),  # Hi, I am MedAlice2
                 ('http', '82.196.9.187', 7890),  # NEMventory
                 ('http', '188.166.14.34', 7890),  # testnet.hxr.team
-            }
+            })
+        self.peers.save()
         # 今の正確なHeightを挿入
         self.height = self.get_biggest_height()
 
@@ -113,19 +112,18 @@ class NemConnect:
                     json.dump(data, f)
 
     def _random_choice_url(self):
-        while True:
+        while len(self.peers) > 0:
+            url = None
             try:
-                url = random.choice(list(self.nis_peers_set))
+                url = self.peers.random()
                 d = self._get(call='chain/last-block', url=url)
                 height = d.json()['height']
-                if self.height <= height:
+                if self.height - 1 < height:
                     return url
-                elif len(self.nis_peers_set) > 1:
-                    continue
                 else:
-                    break
+                    del self.peers[url]
             except:
-                pass
+                del self.peers[url]
         raise NemConnectError("run out of API connection pool.")
 
     def start(self):
@@ -335,9 +333,8 @@ class NemConnect:
             logging.info("finish peer list: %d" % len(result))
 
             # ノードリストの更新
-            with self.lock:
-                self.nis_peers_set.update(result)
-            self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
+            self.peers.update(result)
+            self.peers.save()
             return
         else:
             raise NemConnectError("failed to update peers")
@@ -411,10 +408,8 @@ class NemConnect:
 
     """ rest api methods """
     def get_peers(self):
-        original_peers = self._tmp_read(path=self.PEER_FILE, pre=list())
-        self.nis_peers_set.update({tuple(n) for n in original_peers})
-        self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
-        return self.nis_peers_set
+        self.peers.load()
+        return self.peers.sets
 
     def get_account_info(self, ck):
         """
@@ -962,10 +957,8 @@ class NemConnect:
                 logging.debug("Access GET %s (%s)" % (uri, data))
             return requests.get(uri, params=data, headers=headers, timeout=self.timeout)
         except Exception as e:
-            with self.lock:
-                if url in self.nis_peers_set:
-                    self.nis_peers_set.remove(url)
-            self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
+            del self.peers[url]
+            self.peers.save()
             raise NemConnectError(e)
 
     def _get_auto(self, call, data=None):
@@ -978,10 +971,8 @@ class NemConnect:
                 uri = "%s://%s:%d/%s" % (url[0], url[1], url[2], call)
                 return requests.get(uri, params=data, headers=headers, timeout=self.timeout)
             except Exception as e:
-                with self.lock:
-                    if url in self.nis_peers_set:
-                        self.nis_peers_set.remove(url)
-                self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
+                del self.peers[url]
+                self.peers.save()
                 logging.error(e)
                 continue
         else:
@@ -994,10 +985,8 @@ class NemConnect:
             logging.debug("Access POST %s(%s)" % (uri, data))
             return requests.post(uri, data=json.dumps(data), headers=headers, timeout=self.timeout)
         except Exception as e:
-            with self.lock:
-                if url in self.nis_peers_set:
-                    self.nis_peers_set.remove(url)
-            self._tmp_write(path=self.PEER_FILE, data=self.nis_peers_set)
+            del self.peers[url]
+            self.peers.save()
             raise NemConnectError(e)
 
     @staticmethod

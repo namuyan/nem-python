@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from binascii import hexlify, unhexlify
-from .ed25519 import Ed25519
+from nem_ed25519.key import get_address
 
 
 class TransactionBuilder:
@@ -95,9 +95,9 @@ class TransactionBuilder:
         self.binary += len(tx_dict['modifications']).to_bytes(4, "little")  # cosign num
 
         is_mainnet = tx_dict['version'] == 1744830464
-        ecc = Ed25519(main_net=is_mainnet)
         cosigners = {
-            ecc.get_address(e['cosignatoryAccount'].encode('utf8')): (e['modificationType'], e['cosignatoryAccount'])
+            get_address(e['cosignatoryAccount'], main_net=is_mainnet):
+                (e['modificationType'], e['cosignatoryAccount'])
             for e in tx_dict['modifications']}
 
         for account in sorted(cosigners, reverse=False):
