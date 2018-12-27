@@ -18,7 +18,7 @@ from .utils import QueueSystem, PeerStorage
 
 F_DEBUG = False
 LOCAL_NIS_URL = ("http", "127.0.0.1", 7890)  # transaction_prepareでのみ使用(Debug用)
-ALLOW_NIS_VER = ["0.6.93-BETA", "0.6.95-BETA"]  # 使用するNISのVersion
+ALLOW_NIS_VER = ["0.6.93-BETA", "0.6.95-BETA", "0.6.96-BETA"]  # 使用するNISのVersion
 ALLOW_DIFF_HEIGHT = 2  # 許容するHeightのズレ
 ALLOW_MARGIN_EXP = 5  # NISの経験値？
 
